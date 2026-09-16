@@ -1,0 +1,17 @@
+# Files/dirs not needed in the docker build context
+.git
+.gitignore
+node_modules
+coverage
+dist
+bin
+*.exe
+*.log
+README.md
+QUICKSTART.md
+TODOS.md
+USERS.md
+.env
+.env.local
+*.test
+*.out
