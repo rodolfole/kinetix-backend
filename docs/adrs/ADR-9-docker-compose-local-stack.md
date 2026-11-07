@@ -3,10 +3,10 @@
 - Status: Accepted
 - Date: 2026-09-15
 - Deciders: Kinetix team
-- Related: ADR-3, ADR-8, plans/plan-1-docker-bootstrap.md, plans/plan-2-seed-verification.md
+- Related: ADR-3, ADR-8, plans/PLAN-1-docker-bootstrap.md, plans/PLAN-2-seed-verification.md
 
 ## Context
-A new developer or the frontend repo needs the full API with data running by one command, without installing Go, Postgres or goose. The `Dockerfile` and `docker-compose.yml` were introduced for this (plan-1, plan-2).
+A new developer or the frontend repo needs the full API with data running by one command, without installing Go, Postgres or goose. The `Dockerfile` and `docker-compose.yml` were introduced for this (PLAN-1, PLAN-2).
 
 ## Decision
 - Multi-stage `Dockerfile`: `golang:1.25.5-alpine` builds static binaries (`CGO_ENABLED=0`, `-trimpath`, stripped) for `kinetix-api`, `kinetix-seed` and `kinetix-dbinit`; goose is installed at v3.22.1. The runtime stage is `alpine:3.20`, creates an `app` user (but see risks), and copies migrations to `/app/migrations`.

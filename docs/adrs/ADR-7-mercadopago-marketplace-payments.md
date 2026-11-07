@@ -3,10 +3,10 @@
 - Status: Accepted
 - Date: 2026-11-06
 - Deciders: Kinetix team
-- Related: ADR-8, ADR-12, ADR-14, docs/SPEC-platform-payments.md, docs/API_CONTRACTS.md, docs/DATABASE.md
+- Related: ADR-8, ADR-12, ADR-14, docs/specs/SPEC-platform-payments.md, docs/API_CONTRACTS.md, docs/DATABASE.md
 
 ## Context
-Participants pay for registrations; the platform keeps a configurable commission and pays the organizer the rest. The "Decisions taken" block of docs/SPEC-platform-payments.md fixes the approach: MercadoPago Marketplace API (split at MP level, the backend records the splits), a new `admin` role, and a single global `commission_pct` in `platform_config` (no per-organizer override). Code: `internal/orders` (webhook), `internal/admin` (config, payouts, OAuth), `internal/mp/client.go`, migrations 021-023.
+Participants pay for registrations; the platform keeps a configurable commission and pays the organizer the rest. The "Decisions taken" block of docs/specs/SPEC-platform-payments.md fixes the approach: MercadoPago Marketplace API (split at MP level, the backend records the splits), a new `admin` role, and a single global `commission_pct` in `platform_config` (no per-organizer override). Code: `internal/orders` (webhook), `internal/admin` (config, payouts, OAuth), `internal/mp/client.go`, migrations 021-023.
 
 ## Decision
 - MercadoPago notifies payments at `POST /api/v1/orders/webhook` (public route). The handler validates an HMAC-SHA256 signature, then marks the order `paid` (`internal/orders/webhook.go`, `internal/orders/service.go:ProcessWebhook`).

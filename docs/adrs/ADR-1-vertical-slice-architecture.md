@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-09-15
 - Deciders: Kinetix team
-- Related: ADR-2, ADR-13, docs/ARCHITECTURE.md, docs/PATTERNS.md, plans/PLAN-events.md
+- Related: ADR-2, ADR-13, docs/ARCHITECTURE.md, docs/PATTERNS.md, plans/PLAN-5-events.md
 
 ## Context
 The API covers many small domains (events, distances, routes, orders, admin...). Each one changes mostly on its own, and the team is small. `internal/` already holds one package per domain (`internal/events`, `internal/orders`, `internal/runnerkits`, ...), each with `handler.go`, `service.go`, `repository.go` and `model.go`/`dto.go`. All wiring is manual in `cmd/api/main.go`.

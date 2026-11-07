@@ -3,15 +3,15 @@
 - Status: Accepted
 - Date: 2026-11-06
 - Deciders: Kinetix team
-- Related: ADR-1, plans/PLAN-events.md, docs/ARCHITECTURE.md
+- Related: ADR-1, plans/PLAN-5-events.md, docs/ARCHITECTURE.md
 
 ## Context
-`internal/events` holds the event itself plus its sub-resources (awards, pricing stages, sponsors, registration locations, field config) and the full-detail composition behind `GET /events/{id}/detail`. plans/PLAN-events.md lists three problems: the package is large, `Distance` is defined in `internal/events/model.go` although `internal/distances` owns the behavior, and `GetFullEventDetail` issues one query per distance for awards and pricing (an N+1). The plan records the decision below.
+`internal/events` holds the event itself plus its sub-resources (awards, pricing stages, sponsors, registration locations, field config) and the full-detail composition behind `GET /events/{id}/detail`. plans/PLAN-5-events.md lists three problems: the package is large, `Distance` is defined in `internal/events/model.go` although `internal/distances` owns the behavior, and `GetFullEventDetail` issues one query per distance for awards and pricing (an N+1). The plan records the decision below.
 
 ## Decision
 - Do not split `internal/events` into several slices yet. The sub-resources stay co-located so the detail composition is one round-trip and one package.
 - Keep `Distance` in `internal/events/model.go`; moving it is a follow-up because it changes imports across the codebase.
-- Accept the N+1 in `GetFullEventDetail`. Profile first and optimize (a join or `WHERE distance_id = ANY($1)`) only when a seeded event with many distances shows a measurable regression. Mark the loop with a `# ponytail:` comment naming the upgrade path (PLAN-events.md, Task 7).
+- Accept the N+1 in `GetFullEventDetail`. Profile first and optimize (a join or `WHERE distance_id = ANY($1)`) only when a seeded event with many distances shows a measurable regression. Mark the loop with a `# ponytail:` comment naming the upgrade path (PLAN-5-events.md, Task 7).
 - Revisit this ADR when the package gains a second owner or when a sub-resource needs an independent lifecycle.
 
 ## Consequences

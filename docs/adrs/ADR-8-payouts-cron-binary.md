@@ -3,10 +3,10 @@
 - Status: Accepted
 - Date: 2026-11-06
 - Deciders: Kinetix team
-- Related: ADR-7, ADR-9, docs/ARCHITECTURE.md, docs/SPEC-platform-payments.md
+- Related: ADR-7, ADR-9, docs/ARCHITECTURE.md, docs/specs/SPEC-platform-payments.md
 
 ## Context
-Sending money to organizers must not run in the HTTP request path nor depend on the API process being alive. docs/SPEC-platform-payments.md cut "auto-cron" to v2 and left only the manual `POST /admin/payouts/{id}/send`. The code now has `cmd/payouts-cron/main.go`, which reuses `admin.Service.SendPayout`.
+Sending money to organizers must not run in the HTTP request path nor depend on the API process being alive. docs/specs/SPEC-platform-payments.md cut "auto-cron" to v2 and left only the manual `POST /admin/payouts/{id}/send`. The code now has `cmd/payouts-cron/main.go`, which reuses `admin.Service.SendPayout`.
 
 ## Decision
 - Disbursement automation is a one-shot binary, `cmd/payouts-cron`, scheduled externally (cron, Task Scheduler or a Kubernetes CronJob, as its header comment says).

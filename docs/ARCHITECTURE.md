@@ -83,4 +83,4 @@ Global middleware order (`cmd/api/main.go`): `RequestID`, `RealIP`, `Logger`, `R
 | stdlib `log` only | everywhere | `log/slog` JSON logger with request ID |
 | `payouts-cron` not built into the Docker image | `Dockerfile` | Build and schedule it |
 
-Fixes are tracked in [plans/](../plans/) and the audit in [reports/CODE_AUDIT.md](reports/CODE_AUDIT.md).
+Fixes are tracked in [plans/](../plans/README.md) (see PLAN-15) and specs live in [docs/specs/](specs/) and the audit in [reports/CODE_AUDIT.md](reports/CODE_AUDIT.md).
