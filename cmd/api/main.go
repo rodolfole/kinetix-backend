@@ -263,7 +263,7 @@ func main() {
 			})
 
 			// Admin (protected, requires role=admin)
-			adminHandler := admin.NewHandlerWithMP(adminService, validator, mpClient)
+			adminHandler := admin.NewHandlerWithMP(adminService, validator, mpClient, cfg.JWT.SecretKey) // sign OAuth states with the same secret
 			r.Group(func(r chi.Router) {
 				r.Use(kinetix_middleware.RequireRole("admin"))
 				r.Get("/admin/config", adminHandler.GetConfig)

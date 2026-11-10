@@ -21,9 +21,10 @@ var ErrInvalidCommission = errors.New("commission_pct must be between 0 and 100"
 
 // Handler exposes /admin/* HTTP routes.
 type Handler struct {
-	service  *Service
-	validate *validator.Validate
-	mpClient *mp.Client
+	service     *Service
+	validate    *validator.Validate
+	mpClient    *mp.Client
+	oauthSecret string
 }
 
 func NewHandler(s *Service, v *validator.Validate) *Handler {
@@ -31,8 +32,9 @@ func NewHandler(s *Service, v *validator.Validate) *Handler {
 }
 
 // NewHandlerWithMP builds a handler with MP OAuth + payout support wired in.
-func NewHandlerWithMP(s *Service, v *validator.Validate, mpClient *mp.Client) *Handler {
-	return &Handler{service: s, validate: v, mpClient: mpClient}
+// oauthSecret signs the OAuth `state` token (JWT_SECRET in production).
+func NewHandlerWithMP(s *Service, v *validator.Validate, mpClient *mp.Client, oauthSecret string) *Handler {
+	return &Handler{service: s, validate: v, mpClient: mpClient, oauthSecret: oauthSecret}
 }
 
 func (h *Handler) validateStruct(s any) error {
@@ -122,7 +124,7 @@ func (h *Handler) ConnectMP(w http.ResponseWriter, r *http.Request) {
 		kinetixjson.WriteError(w, http.StatusBadRequest, "invalid organizer id")
 		return
 	}
-	state := orgID.String() // simple per-organizer state token
+	state := SignOAuthState(h.oauthSecret, orgID) // PLAN-16 T13: signed state
 	url := h.mpClient.OAuthAuthorizeURL(state)
 	kinetixjson.Write(w, http.StatusOK, ConnectMPResponse{
 		AuthorizeURL: url,
@@ -142,7 +144,7 @@ func (h *Handler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 		kinetixjson.WriteError(w, http.StatusBadRequest, "missing code")
 		return
 	}
-	orgID, err := uuid.Parse(state)
+	orgID, err := VerifyOAuthState(h.oauthSecret, state)
 	if err != nil {
 		kinetixjson.WriteError(w, http.StatusBadRequest, "invalid state")
 		return
@@ -204,7 +206,7 @@ func splitPath(path, prefix, suffix string) []string {
 	return []string{rest}
 }
 
-func hasPrefix(s, p string) bool  { return len(s) >= len(p) && s[:len(p)] == p }
+func hasPrefix(s, p string) bool   { return len(s) >= len(p) && s[:len(p)] == p }
 func hasSuffix(s, suf string) bool { return len(s) >= len(suf) && s[len(s)-len(suf):] == suf }
 
 func configToResponse(cfg db.PlatformConfig) ConfigResponse {

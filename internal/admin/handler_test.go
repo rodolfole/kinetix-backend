@@ -114,7 +114,7 @@ func TestCalculatePayoutAmount(t *testing.T) {
 		{name: "10% off", totalCents: 10000, commissionPct: 10, want: 9000},
 		{name: "25% off", totalCents: 1000, commissionPct: 25, want: 750},
 		{name: "100% returns 0", totalCents: 99999, commissionPct: 100, want: 0},
-		{name: "rounds down", totalCents: 100, commissionPct: 33.33, want: 66},  // 100 * 0.6667 = 66.67 → floor = 66
+		{name: "rounds down", totalCents: 100, commissionPct: 33.33, want: 66}, // 100 * 0.6667 = 66.67 → floor = 66
 		{name: "zero amount returns 0", totalCents: 0, commissionPct: 10, want: 0},
 		{name: "negative amount returns 0", totalCents: -100, commissionPct: 10, want: 0},
 		{name: "negative pct clamped to 0", totalCents: 1000, commissionPct: -5, want: 1000},
