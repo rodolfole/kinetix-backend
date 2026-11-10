@@ -1,6 +1,6 @@
 # PLAN-16: Platform hardening and completion (backend)
 
-- Status: Approved
+- Status: In progress (T1-T3 done)
 - Created: 2026-11-06 | Updated: 2026-11-06
 - Spec: docs/specs/SPEC-platform-payments.md, docs/specs/SPEC-orders.md, docs/specs/SPEC-events.md
 - ADRs: ADR-6, ADR-7, ADR-12, ADR-14
@@ -22,9 +22,9 @@ Close the security and integrity gaps that the phase-1 audit (`docs/reports/CODE
 Decisions embedded here live as ADRs: authorization model choice (ownership checks) updates [ADR-1](../docs/adrs/ADR-1-vertical-slice-architecture.md); the money model and the transaction seam must be approved before the tasks that depend on them.
 
 ## Tasks
-- [ ] T1 Approve ADR-14 (`ExecTx` on `store.Store`) — no code change.
-- [ ] T2 Implement `store.ExecTx` and a per-request scoped context; unit test with a fake pool or pgxmock — test first: `internal/store` — files: `internal/store/store.go`.
-- [ ] T3 Characterization tests for `auth` service on the seam (login success/wrong password/inactive, register organizer/participant, refresh) — test first: `internal/auth/service_test.go` — files: `internal/auth/`.
+- [x] T1 Approve ADR-14 (`ExecTx` on `store.Store`) — no code change.
+- [x] T2 Implement `store.ExecTx` and a per-request scoped context; unit test with a fake pool or pgxmock — test first: `internal/store` — files: `internal/store/store.go`.
+- [x] T3 Characterization tests for `auth` service on the seam (login success/wrong password/inactive, register organizer/participant, refresh) — test first: `internal/auth/service_test.go` — files: `internal/auth/`.
 - [ ] T4 Characterization tests for `admin` service (config bounds, payouts list, `SendPayout` success/failure with a fake MP gateway) — test first: `internal/admin/service_test.go` — files: `internal/admin/`.
 - [ ] T5 Characterization tests for `registrations` service (create validation, duplicate registration, bib generation race) — test first: `internal/registrations/service_test.go` — files: `internal/registrations/`.
 - [ ] T6 Registration creation becomes transactional (participant + registration + bib) and uses a per-event bib sequence — test first: service test with fake repo — files: `internal/registrations/service.go`, `internal/adapters/postgresql/migrations/` (new sequence migration).
@@ -39,6 +39,9 @@ Decisions embedded here live as ADRs: authorization model choice (ownership chec
 - [ ] T15 Config hygiene: remove unused env vars (`GIN_MODE`, `MP_SANDBOX`, `WEBHOOK_BASE_URL`, `JWT_TOKEN_EXPIRY`), rename the reads to what code uses, document in `.env.example` and README — files: `docker-compose.yml`, `Dockerfile`, `.env.example`, `internal/config/`.
 - [ ] T16 Docker: build `payouts-cron` into the image, drop `GIN_MODE`, run as the non-root `app` user, add scheduled job (compose profile or external scheduler doc) — files: `Dockerfile`, `docker-compose.yml`.
 - [ ] T17 CORS hardening kickoff from the phase-6 advisories: add `Vary: Origin` (done in phase 6) follow-ups; document origin lifecycle — files: `docs/ARCHITECTURE.md`.
+
+## Log
+- 2026-11-06: T1 ADR-14/ADR-12 accepted (docs commit 3c432f4). T2 store.ExecTx committed (760f996) with pool-free unit tests via TxStarter fake. T3 auth seam (Repository/TxRunner) + characterization + transactional registration committed (dbec4ff): failing user insert rolls the profile back and maps 23505 to ErrEmailTaken.
 
 ## Verification
 ```bash
