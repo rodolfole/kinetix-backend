@@ -133,7 +133,7 @@ func main() {
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.Timeout(60 * time.Second))
-	r.Use(kinetix_middleware.CORS())
+	r.Use(kinetix_middleware.CORS(cfg.Server.CORSAllowedOrigins))
 
 	// Public routes
 	r.Get("/health", healthCheck)
