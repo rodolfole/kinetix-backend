@@ -11,14 +11,16 @@ import (
 var (
 	ErrInvalidSignature = errors.New("invalid webhook signature")
 	ErrMissingSignature = errors.New("missing webhook signature header")
+	// ErrWebhookNotConfigured is returned when MP_WEBHOOK_SECRET is empty.
+	// Verification fails closed: an unconfigured secret never skips it.
+	ErrWebhookNotConfigured = errors.New("webhook verification not configured")
 )
 
 // ValidateMercadoPagoWebhook validates the MercadoPago webhook signature
 // MercadoPago sends the signature in the X-Merchant-Token header as HMAC-SHA256
 func ValidateMercadoPagoWebhook(webhookSecret, body, signatureHeader string) error {
 	if webhookSecret == "" {
-		// If no secret configured, skip validation (not recommended for production)
-		return nil
+		return ErrWebhookNotConfigured
 	}
 
 	if signatureHeader == "" {

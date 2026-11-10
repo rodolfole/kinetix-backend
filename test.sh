@@ -5,11 +5,11 @@ set -e
 cd "$(dirname "$0")"
 
 echo "==> Running unit tests"
-go test ./internal/auth -count=1
+go test ./... -count=1 -race
 
 echo
 echo "==> Running integration tests (requires docker-compose up)"
-go test ./internal/integration_test -count=1 -v
+go test -tags=integration ./internal/... -count=1 -v
 
 echo
 echo "==> All backend tests passed"

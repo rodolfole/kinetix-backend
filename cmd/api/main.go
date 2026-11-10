@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"kinetix-api/internal/agecategories"
+	"kinetix-api/internal/admin"
+	"kinetix-api/internal/mp"
 	"kinetix-api/internal/auth"
 	"kinetix-api/internal/config"
 	"kinetix-api/internal/database"
@@ -76,13 +78,16 @@ func main() {
 	participantRepo := participants.NewRepository(appStore)
 	registrationRepo := registrations.NewRepository(appStore)
 	orderRepo := orders.NewRepository(appStore)
+	adminRepo := admin.NewRepository(appStore)
 
 	// Initialize services
 	organizerService := organizers.NewService(organizerRepo, validator)
 	eventService := events.NewService(eventRepo, validator)
 	participantService := participants.NewService(participantRepo, validator)
 	registrationService := registrations.NewService(registrationRepo, appStore, validator)
-	orderService := orders.NewService(orderRepo, validator)
+	orderService := orders.NewService(orderRepo, adminRepo, validator)
+	adminService := admin.NewService(adminRepo)
+	mpClient := mp.NewClient(cfg.MercadoPago)
 
 	// Initialize auth service and handler
 	// JWT secret comes from config.Load() which panics if JWT_SECRET is not set
@@ -255,6 +260,18 @@ func main() {
 			// Orders (protected)
 			r.Route("/orders", func(r chi.Router) {
 				orderHandler.Routes(r)
+			})
+
+			// Admin (protected, requires role=admin)
+			adminHandler := admin.NewHandlerWithMP(adminService, validator, mpClient)
+			r.Group(func(r chi.Router) {
+				r.Use(kinetix_middleware.RequireRole("admin"))
+				r.Get("/admin/config", adminHandler.GetConfig)
+				r.Put("/admin/config", adminHandler.UpdateConfig)
+				r.Get("/admin/payouts", adminHandler.ListPayouts)
+				r.Get("/admin/organizers/{id}/connect-mp", adminHandler.ConnectMP)
+				r.Post("/admin/organizers/callback", adminHandler.OAuthCallback)
+				r.Post("/admin/payouts/{id}/send", adminHandler.SendPayout)
 			})
 		})
 

@@ -3,23 +3,61 @@ package orders
 import (
 	"context"
 	"fmt"
+	"log"
+	"math"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+
+	db "kinetix-api/internal/adapters/postgresql/sqlc"
+	"kinetix-api/internal/admin"
 )
+
+// OrderRepository is the data access the orders service needs.
+type OrderRepository interface {
+	Create(ctx context.Context, req CreateOrderRequest) (Order, error)
+	GetByID(ctx context.Context, id uuid.UUID) (Order, error)
+	GetByRegistrationID(ctx context.Context, registrationID uuid.UUID) (Order, error)
+	GetByMercadoPagoPaymentID(ctx context.Context, paymentID string) (Order, error)
+	ListByEvent(ctx context.Context, eventID uuid.UUID) ([]Order, error)
+	ListByParticipant(ctx context.Context, participantID uuid.UUID) ([]Order, error)
+	ListByStatus(ctx context.Context, status string) ([]Order, error)
+	UpdatePaymentInfo(ctx context.Context, id uuid.UUID, req UpdateOrderPaymentInfoRequest) (Order, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, status string) (Order, error)
+	// EventOrganizerID returns the organizer that owns the event.
+	EventOrganizerID(ctx context.Context, eventID uuid.UUID) (uuid.UUID, error)
+}
+
+// PayoutRepository is the slice of the admin repository used to record
+// organizer payouts after a paid order.
+type PayoutRepository interface {
+	GetPlatformConfig(ctx context.Context) (db.PlatformConfig, error)
+	CreatePayout(ctx context.Context, params db.CreateOrganizerPayoutParams) (db.OrganizerPayout, error)
+}
 
 // Service handles business logic for orders
 type Service struct {
-	repo      *Repository
+	repo      OrderRepository
+	adminRepo PayoutRepository
 	validator *validator.Validate
+	// logPayoutError reports a payout that could not be recorded. The order
+	// stays paid; the failure must be visible so it can be reconciled.
+	logPayoutError func(order Order, err error)
 }
 
-// NewService creates a new orders service
-func NewService(repo *Repository, validator *validator.Validate) *Service {
-	return &Service{
-		repo:      repo,
-		validator: validator,
+func defaultLogPayoutError(order Order, err error) {
+	log.Printf("orders: payout not recorded for order %s (event %s): %v", order.ID, order.EventID, err)
+}
+
+// NewService creates a new orders service.
+// adminRepo is the admin module's repo (used to read commission and create
+// organizer_payouts rows). Can be nil in tests that don't reach ProcessWebhook.
+func NewService(repo OrderRepository, adminRepo *admin.Repository, validator *validator.Validate) *Service {
+	s := &Service{repo: repo, validator: validator, logPayoutError: defaultLogPayoutError}
+	if adminRepo != nil { // keep a nil *admin.Repository as a nil interface
+		s.adminRepo = adminRepo
 	}
+	return s
 }
 
 // Create creates a new order
@@ -75,18 +113,69 @@ func (s *Service) UpdateStatus(ctx context.Context, id uuid.UUID, status string)
 	return s.repo.UpdateStatus(ctx, id, status)
 }
 
-// ProcessWebhook processes Mercado Pago webhook
+// ProcessWebhook processes a Mercado Pago payment notification. It is
+// idempotent: an order that is already paid is returned unchanged and no
+// second payout is recorded.
 func (s *Service) ProcessWebhook(ctx context.Context, paymentID string) (Order, error) {
 	order, err := s.repo.GetByMercadoPagoPaymentID(ctx, paymentID)
 	if err != nil {
 		return Order{}, fmt.Errorf("order not found: %w", err)
 	}
+	if order.Status == "paid" {
+		return order, nil
+	}
 
-	// Update order status based on payment
 	updatedOrder, err := s.repo.UpdateStatus(ctx, order.ID, "paid")
 	if err != nil {
 		return Order{}, fmt.Errorf("failed to update order status: %w", err)
 	}
 
+	// After payment, record a pending organizer_payout (net of commission).
+	// The order is already paid, so a payout failure is reported, not returned.
+	if s.adminRepo != nil {
+		if err := s.recordOrganizerPayout(ctx, updatedOrder); err != nil {
+			s.reportPayoutError(updatedOrder, err)
+		}
+	}
+
 	return updatedOrder, nil
+}
+
+func (s *Service) reportPayoutError(order Order, err error) {
+	if s.logPayoutError != nil {
+		s.logPayoutError(order, err)
+		return
+	}
+	defaultLogPayoutError(order, err)
+}
+
+// recordOrganizerPayout reads the current commission %, computes the net
+// amount in cents, and inserts a pending organizer_payout row for the
+// organizer that owns the order's event.
+func (s *Service) recordOrganizerPayout(ctx context.Context, order Order) error {
+	organizerID, err := s.repo.EventOrganizerID(ctx, order.EventID)
+	if err != nil {
+		return fmt.Errorf("resolve event organizer: %w", err)
+	}
+	cfg, err := s.adminRepo.GetPlatformConfig(ctx)
+	if err != nil {
+		return fmt.Errorf("read platform config: %w", err)
+	}
+	f8, err := cfg.CommissionPct.Float64Value()
+	if err != nil {
+		return fmt.Errorf("read commission: %w", err)
+	}
+	totalCents := int64(math.Round(order.Amount * 100)) // order.Amount is in major units (e.g. MXN)
+	netCents := admin.CalculatePayoutAmount(totalCents, f8.Float64)
+
+	if _, err := s.adminRepo.CreatePayout(ctx, db.CreateOrganizerPayoutParams{
+		OrganizerID:   organizerID,
+		OrderID:       order.ID,
+		AmountCents:   netCents,
+		Currency:      order.Currency,
+		CommissionPct: cfg.CommissionPct,
+	}); err != nil {
+		return fmt.Errorf("create payout: %w", err)
+	}
+	return nil
 }

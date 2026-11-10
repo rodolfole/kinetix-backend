@@ -2,8 +2,11 @@ package orders
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+
+	jsonlib "kinetix-api/internal/json"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -62,10 +65,18 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	if eventIDStr != "" {
-		eventID, _ := uuid.Parse(eventIDStr)
+		eventID, parseErr := uuid.Parse(eventIDStr)
+		if parseErr != nil {
+			jsonlib.WriteError(w, http.StatusBadRequest, "invalid event_id")
+			return
+		}
 		orders, err = h.service.ListByEvent(r.Context(), eventID)
 	} else if participantIDStr != "" {
-		participantID, _ := uuid.Parse(participantIDStr)
+		participantID, parseErr := uuid.Parse(participantIDStr)
+		if parseErr != nil {
+			jsonlib.WriteError(w, http.StatusBadRequest, "invalid participant_id")
+			return
+		}
 		orders, err = h.service.ListByParticipant(r.Context(), participantID)
 	} else if status != "" {
 		orders, err = h.service.ListByStatus(r.Context(), status)
@@ -170,6 +181,10 @@ func (h *Handler) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// Validate webhook signature
 	if err := ValidateWebhookRequest(h.webhookSecret, r, body); err != nil {
+		if errors.Is(err, ErrWebhookNotConfigured) {
+			jsonlib.WriteError(w, http.StatusServiceUnavailable, ErrWebhookNotConfigured.Error())
+			return
+		}
 		if err == ErrMissingSignature {
 			http.Error(w, "missing webhook signature", http.StatusUnauthorized)
 			return

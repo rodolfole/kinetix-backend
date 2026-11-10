@@ -76,6 +76,15 @@ func (r *Repository) GetByRegistrationID(ctx context.Context, registrationID uui
 	return toOrder(order), nil
 }
 
+// EventOrganizerID returns the organizer that owns the event.
+func (r *Repository) EventOrganizerID(ctx context.Context, eventID uuid.UUID) (uuid.UUID, error) {
+	event, err := r.store.Queries.GetEvent(ctx, eventID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("event not found: %w", err)
+	}
+	return event.OrganizerID, nil
+}
+
 // GetByMercadoPagoPaymentID retrieves order by Mercado Pago payment ID
 func (r *Repository) GetByMercadoPagoPaymentID(ctx context.Context, paymentID string) (Order, error) {
 	order, err := r.store.Queries.GetOrderByMercadoPagoPaymentId(ctx, convert.ToPgText(paymentID))
