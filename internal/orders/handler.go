@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	kinemiddleware "kinetix-api/internal/middleware"
 )
 
 // Handler handles HTTP requests for orders
@@ -26,13 +28,14 @@ func NewHandler(service *Service, webhookSecret string) *Handler {
 	}
 }
 
-// Routes registers order routes
+// Routes registers order routes. Mutating a payment belongs to the
+// platform: those two routes require the admin role (PLAN-16 T8).
 func (h *Handler) Routes(r chi.Router) {
 	r.Post("/", h.Create)
 	r.Get("/", h.List)
 	r.Get("/{id}", h.GetByID)
-	r.Put("/{id}/payment", h.UpdatePaymentInfo)
-	r.Put("/{id}/status", h.UpdateStatus)
+	r.With(kinemiddleware.RequireRole("admin")).Put("/{id}/payment", h.UpdatePaymentInfo)
+	r.With(kinemiddleware.RequireRole("admin")).Put("/{id}/status", h.UpdateStatus)
 }
 
 // Create handles POST /orders

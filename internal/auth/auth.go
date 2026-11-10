@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"github.com/google/uuid"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -15,11 +16,15 @@ const (
 	TokenTypeRefresh = "refresh"
 )
 
-// Claims represents JWT claims
+// Claims represents JWT claims. OrganizerID/ParticipantID link the token to
+// the profile so ownership checks are pure (PLAN-16 T7). Tokens issued
+// before the claim existed carry nil for both.
 type Claims struct {
-	UserID    string `json:"user_id"`
-	Role      string `json:"role"`
-	TokenType string `json:"typ,omitempty"`
+	UserID        string     `json:"user_id"`
+	Role          string     `json:"role"`
+	TokenType     string     `json:"typ,omitempty"`
+	OrganizerID   *uuid.UUID `json:"organizer_id,omitempty"`
+	ParticipantID *uuid.UUID `json:"participant_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -30,26 +35,37 @@ type Config struct {
 	RefreshExpiry time.Duration
 }
 
+// Identity names the subject: user id, role, and the linked profile ids
+// (nil for admins without a profile).
+type Identity struct {
+	UserID        string
+	Role          string
+	OrganizerID   *uuid.UUID
+	ParticipantID *uuid.UUID
+}
+
 // GenerateToken generates a new access token
-func GenerateToken(cfg Config, userID, role string) (string, error) {
-	return generate(cfg, userID, role, TokenTypeAccess, cfg.TokenExpiry)
+func GenerateToken(cfg Config, id Identity) (string, error) {
+	return generate(cfg, id, TokenTypeAccess, cfg.TokenExpiry)
 }
 
 // GenerateRefreshToken generates a refresh token that lives RefreshExpiry
 // (falls back to TokenExpiry when RefreshExpiry is not set).
-func GenerateRefreshToken(cfg Config, userID, role string) (string, error) {
+func GenerateRefreshToken(cfg Config, id Identity) (string, error) {
 	expiry := cfg.RefreshExpiry
 	if expiry == 0 {
 		expiry = cfg.TokenExpiry
 	}
-	return generate(cfg, userID, role, TokenTypeRefresh, expiry)
+	return generate(cfg, id, TokenTypeRefresh, expiry)
 }
 
-func generate(cfg Config, userID, role, tokenType string, expiry time.Duration) (string, error) {
+func generate(cfg Config, id Identity, tokenType string, expiry time.Duration) (string, error) {
 	claims := Claims{
-		UserID:    userID,
-		Role:      role,
-		TokenType: tokenType,
+		UserID:        id.UserID,
+		Role:          id.Role,
+		TokenType:     tokenType,
+		OrganizerID:   id.OrganizerID,
+		ParticipantID: id.ParticipantID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

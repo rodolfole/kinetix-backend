@@ -11,11 +11,11 @@ import (
 
 func TestJWTAuth_TokenTypes(t *testing.T) {
 	cfg := auth.Config{SecretKey: "test-secret", TokenExpiry: time.Hour, RefreshExpiry: 24 * time.Hour}
-	access, err := auth.GenerateToken(cfg, "user-1", "organizer")
+	access, err := auth.GenerateToken(cfg, auth.Identity{UserID: "user-1", Role: "organizer"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	refresh, err := auth.GenerateRefreshToken(cfg, "user-1", "organizer")
+	refresh, err := auth.GenerateRefreshToken(cfg, auth.Identity{UserID: "user-1", Role: "organizer"})
 	if err != nil {
 		t.Fatal(err)
 	}

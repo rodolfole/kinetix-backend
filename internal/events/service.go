@@ -6,6 +6,9 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+
+	"kinetix-api/internal/auth"
+	"kinetix-api/internal/authz"
 )
 
 // Service handles business logic for events
@@ -22,12 +25,43 @@ func NewService(repo *Repository, validator *validator.Validate) *Service {
 	}
 }
 
+// authorizeByDistanceID verifies the caller may mutate resources of the
+// event the distance belongs to.
+func (s *Service) authorizeByDistanceID(ctx context.Context, caller *auth.Claims, distanceID uuid.UUID) error {
+	org, err := s.repo.EventOrganizerByDistance(ctx, distanceID)
+	if err != nil {
+		return fmt.Errorf("distance not found: %w", err)
+	}
+	return authz.CanManageEvent(caller, org)
+}
+
+// authorize loads the event and verifies the caller may mutate it.
+// Admins pass; the owning organizer passes. nil claims are rejected.
+func (s *Service) authorize(ctx context.Context, caller *auth.Claims, id uuid.UUID) (Event, error) {
+	evt, err := s.repo.GetEventByID(ctx, id)
+	if err != nil {
+		return Event{}, fmt.Errorf("event not found: %w", err)
+	}
+	if err := authz.CanManageEvent(caller, evt.OrganizerID); err != nil {
+		return Event{}, err
+	}
+	return evt, nil
+}
+
 // EVENT operations
 
-// Create creates a new event
-func (s *Service) Create(ctx context.Context, req CreateEventRequest) (Event, error) {
+// Create creates a new event owned by the caller's organizer (admins may
+// create on behalf of any organizer via the body value).
+func (s *Service) Create(ctx context.Context, caller *auth.Claims, req CreateEventRequest) (Event, error) {
 	if err := s.validator.Struct(req); err != nil {
 		return Event{}, fmt.Errorf("validation error: %w", err)
+	}
+
+	if caller != nil && caller.Role != "admin" {
+		if caller.OrganizerID == nil {
+			return Event{}, authz.ErrForbidden
+		}
+		req.OrganizerID = *caller.OrganizerID
 	}
 
 	if len(req.Itinerary) == 0 {
@@ -128,7 +162,7 @@ func (s *Service) ListByOrganizer(ctx context.Context, organizerID uuid.UUID) ([
 }
 
 // Update updates an existing event
-func (s *Service) Update(ctx context.Context, id uuid.UUID, req UpdateEventRequest) (Event, error) {
+func (s *Service) Update(ctx context.Context, caller *auth.Claims, id uuid.UUID, req UpdateEventRequest) (Event, error) {
 	if id == uuid.Nil {
 		return Event{}, fmt.Errorf("invalid event ID")
 	}
@@ -141,9 +175,8 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, req UpdateEventReque
 		return Event{}, fmt.Errorf("itinerary is required: at least one item must be provided")
 	}
 
-	_, err := s.repo.GetEventByID(ctx, id)
-	if err != nil {
-		return Event{}, fmt.Errorf("event not found: %w", err)
+	if _, err := s.authorize(ctx, caller, id); err != nil {
+		return Event{}, err
 	}
 
 	if req.Status == "" {
@@ -159,9 +192,13 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, req UpdateEventReque
 }
 
 // UpdateStatus updates only the event status
-func (s *Service) UpdateStatus(ctx context.Context, id uuid.UUID, status string) (Event, error) {
+func (s *Service) UpdateStatus(ctx context.Context, caller *auth.Claims, id uuid.UUID, status string) (Event, error) {
 	if id == uuid.Nil {
 		return Event{}, fmt.Errorf("invalid event ID")
+	}
+
+	if _, err := s.authorize(ctx, caller, id); err != nil {
+		return Event{}, err
 	}
 
 	validStatuses := map[string]bool{
@@ -184,14 +221,13 @@ func (s *Service) UpdateStatus(ctx context.Context, id uuid.UUID, status string)
 }
 
 // Delete removes an event
-func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
+func (s *Service) Delete(ctx context.Context, caller *auth.Claims, id uuid.UUID) error {
 	if id == uuid.Nil {
 		return fmt.Errorf("invalid event ID")
 	}
 
-	_, err := s.repo.GetEventByID(ctx, id)
-	if err != nil {
-		return fmt.Errorf("event not found: %w", err)
+	if _, err := s.authorize(ctx, caller, id); err != nil {
+		return err
 	}
 
 	if err := s.repo.Delete(ctx, id); err != nil {
@@ -204,14 +240,13 @@ func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
 // AWARD operations
 
 // CreateAward creates a new award
-func (s *Service) CreateAward(ctx context.Context, req CreateAwardRequest) (Award, error) {
+func (s *Service) CreateAward(ctx context.Context, caller *auth.Claims, req CreateAwardRequest) (Award, error) {
 	if err := s.validator.Struct(req); err != nil {
 		return Award{}, fmt.Errorf("validation error: %w", err)
 	}
 
-	_, err := s.repo.GetDistance(ctx, req.DistanceID)
-	if err != nil {
-		return Award{}, fmt.Errorf("distance not found: %w", err)
+	if err := s.authorizeByDistanceID(ctx, caller, req.DistanceID); err != nil {
+		return Award{}, err
 	}
 
 	award, err := s.repo.CreateAward(ctx, req)
@@ -251,13 +286,19 @@ func (s *Service) ListAwardsByDistance(ctx context.Context, distanceID uuid.UUID
 }
 
 // UpdateAward updates an award
-func (s *Service) UpdateAward(ctx context.Context, id uuid.UUID, req UpdateAwardRequest) (Award, error) {
+func (s *Service) UpdateAward(ctx context.Context, caller *auth.Claims, id uuid.UUID, req UpdateAwardRequest) (Award, error) {
 	if id == uuid.Nil {
 		return Award{}, fmt.Errorf("invalid award ID")
 	}
 
 	if err := s.validator.Struct(req); err != nil {
 		return Award{}, fmt.Errorf("validation error: %w", err)
+	}
+
+	if award, err := s.repo.GetAward(ctx, id); err != nil {
+		return Award{}, fmt.Errorf("award not found: %w", err)
+	} else if err := s.authorizeByDistanceID(ctx, caller, award.DistanceID); err != nil {
+		return Award{}, err
 	}
 
 	updated, err := s.repo.UpdateAward(ctx, id, req)
@@ -269,9 +310,15 @@ func (s *Service) UpdateAward(ctx context.Context, id uuid.UUID, req UpdateAward
 }
 
 // DeleteAward removes an award
-func (s *Service) DeleteAward(ctx context.Context, id uuid.UUID) error {
+func (s *Service) DeleteAward(ctx context.Context, caller *auth.Claims, id uuid.UUID) error {
 	if id == uuid.Nil {
 		return fmt.Errorf("invalid award ID")
+	}
+
+	if award, err := s.repo.GetAward(ctx, id); err != nil {
+		return fmt.Errorf("award not found: %w", err)
+	} else if err := s.authorizeByDistanceID(ctx, caller, award.DistanceID); err != nil {
+		return err
 	}
 
 	if err := s.repo.DeleteAward(ctx, id); err != nil {
@@ -284,14 +331,13 @@ func (s *Service) DeleteAward(ctx context.Context, id uuid.UUID) error {
 // PRICING STAGE operations
 
 // CreatePricingStage creates a new pricing stage
-func (s *Service) CreatePricingStage(ctx context.Context, req CreatePricingStageRequest) (PricingStage, error) {
+func (s *Service) CreatePricingStage(ctx context.Context, caller *auth.Claims, req CreatePricingStageRequest) (PricingStage, error) {
 	if err := s.validator.Struct(req); err != nil {
 		return PricingStage{}, fmt.Errorf("validation error: %w", err)
 	}
 
-	_, err := s.repo.GetDistance(ctx, req.DistanceID)
-	if err != nil {
-		return PricingStage{}, fmt.Errorf("distance not found: %w", err)
+	if err := s.authorizeByDistanceID(ctx, caller, req.DistanceID); err != nil {
+		return PricingStage{}, err
 	}
 
 	if req.EndDate.Before(req.StartDate) {
@@ -349,13 +395,19 @@ func (s *Service) GetCurrentPricing(ctx context.Context, distanceID uuid.UUID) (
 }
 
 // UpdatePricingStage updates a pricing stage
-func (s *Service) UpdatePricingStage(ctx context.Context, id uuid.UUID, req UpdatePricingStageRequest) (PricingStage, error) {
+func (s *Service) UpdatePricingStage(ctx context.Context, caller *auth.Claims, id uuid.UUID, req UpdatePricingStageRequest) (PricingStage, error) {
 	if id == uuid.Nil {
 		return PricingStage{}, fmt.Errorf("invalid pricing stage ID")
 	}
 
 	if err := s.validator.Struct(req); err != nil {
 		return PricingStage{}, fmt.Errorf("validation error: %w", err)
+	}
+
+	if stage, err := s.repo.GetPricingStage(ctx, id); err != nil {
+		return PricingStage{}, fmt.Errorf("pricing stage not found: %w", err)
+	} else if err := s.authorizeByDistanceID(ctx, caller, stage.DistanceID); err != nil {
+		return PricingStage{}, err
 	}
 
 	if req.EndDate.Before(req.StartDate) {
@@ -371,9 +423,15 @@ func (s *Service) UpdatePricingStage(ctx context.Context, id uuid.UUID, req Upda
 }
 
 // DeletePricingStage removes a pricing stage
-func (s *Service) DeletePricingStage(ctx context.Context, id uuid.UUID) error {
+func (s *Service) DeletePricingStage(ctx context.Context, caller *auth.Claims, id uuid.UUID) error {
 	if id == uuid.Nil {
 		return fmt.Errorf("invalid pricing stage ID")
+	}
+
+	if stage, err := s.repo.GetPricingStage(ctx, id); err != nil {
+		return fmt.Errorf("pricing stage not found: %w", err)
+	} else if err := s.authorizeByDistanceID(ctx, caller, stage.DistanceID); err != nil {
+		return err
 	}
 
 	if err := s.repo.DeletePricingStage(ctx, id); err != nil {
@@ -386,9 +444,13 @@ func (s *Service) DeletePricingStage(ctx context.Context, id uuid.UUID) error {
 // SPONSOR operations
 
 // CreateSponsor creates a new sponsor
-func (s *Service) CreateSponsor(ctx context.Context, req CreateSponsorRequest) (Sponsor, error) {
+func (s *Service) CreateSponsor(ctx context.Context, caller *auth.Claims, req CreateSponsorRequest) (Sponsor, error) {
 	if err := s.validator.Struct(req); err != nil {
 		return Sponsor{}, fmt.Errorf("validation error: %w", err)
+	}
+
+	if _, err := s.authorize(ctx, caller, req.EventID); err != nil {
+		return Sponsor{}, err
 	}
 
 	_, err := s.repo.GetEventByID(ctx, req.EventID)
@@ -433,13 +495,19 @@ func (s *Service) ListSponsorsByEvent(ctx context.Context, eventID uuid.UUID) ([
 }
 
 // UpdateSponsor updates a sponsor
-func (s *Service) UpdateSponsor(ctx context.Context, id uuid.UUID, req UpdateSponsorRequest) (Sponsor, error) {
+func (s *Service) UpdateSponsor(ctx context.Context, caller *auth.Claims, id uuid.UUID, req UpdateSponsorRequest) (Sponsor, error) {
 	if id == uuid.Nil {
 		return Sponsor{}, fmt.Errorf("invalid sponsor ID")
 	}
 
 	if err := s.validator.Struct(req); err != nil {
 		return Sponsor{}, fmt.Errorf("validation error: %w", err)
+	}
+
+	if sponsor, err := s.repo.GetSponsor(ctx, id); err != nil {
+		return Sponsor{}, fmt.Errorf("sponsor not found: %w", err)
+	} else if _, err := s.authorize(ctx, caller, sponsor.EventID); err != nil {
+		return Sponsor{}, err
 	}
 
 	updated, err := s.repo.UpdateSponsor(ctx, id, req)
@@ -451,9 +519,15 @@ func (s *Service) UpdateSponsor(ctx context.Context, id uuid.UUID, req UpdateSpo
 }
 
 // DeleteSponsor removes a sponsor
-func (s *Service) DeleteSponsor(ctx context.Context, id uuid.UUID) error {
+func (s *Service) DeleteSponsor(ctx context.Context, caller *auth.Claims, id uuid.UUID) error {
 	if id == uuid.Nil {
 		return fmt.Errorf("invalid sponsor ID")
+	}
+
+	if sponsor, err := s.repo.GetSponsor(ctx, id); err != nil {
+		return fmt.Errorf("sponsor not found: %w", err)
+	} else if _, err := s.authorize(ctx, caller, sponsor.EventID); err != nil {
+		return err
 	}
 
 	if err := s.repo.DeleteSponsor(ctx, id); err != nil {
@@ -466,9 +540,13 @@ func (s *Service) DeleteSponsor(ctx context.Context, id uuid.UUID) error {
 // REGISTRATION LOCATION operations
 
 // CreateRegistrationLocation creates a new registration location
-func (s *Service) CreateRegistrationLocation(ctx context.Context, req CreateRegistrationLocationRequest) (RegistrationLocation, error) {
+func (s *Service) CreateRegistrationLocation(ctx context.Context, caller *auth.Claims, req CreateRegistrationLocationRequest) (RegistrationLocation, error) {
 	if err := s.validator.Struct(req); err != nil {
 		return RegistrationLocation{}, fmt.Errorf("validation error: %w", err)
+	}
+
+	if _, err := s.authorize(ctx, caller, req.EventID); err != nil {
+		return RegistrationLocation{}, err
 	}
 
 	_, err := s.repo.GetEventByID(ctx, req.EventID)
@@ -513,13 +591,19 @@ func (s *Service) ListRegistrationLocationsByEvent(ctx context.Context, eventID 
 }
 
 // UpdateRegistrationLocation updates a registration location
-func (s *Service) UpdateRegistrationLocation(ctx context.Context, id uuid.UUID, req UpdateRegistrationLocationRequest) (RegistrationLocation, error) {
+func (s *Service) UpdateRegistrationLocation(ctx context.Context, caller *auth.Claims, id uuid.UUID, req UpdateRegistrationLocationRequest) (RegistrationLocation, error) {
 	if id == uuid.Nil {
 		return RegistrationLocation{}, fmt.Errorf("invalid registration location ID")
 	}
 
 	if err := s.validator.Struct(req); err != nil {
 		return RegistrationLocation{}, fmt.Errorf("validation error: %w", err)
+	}
+
+	if loc, err := s.repo.GetRegistrationLocation(ctx, id); err != nil {
+		return RegistrationLocation{}, fmt.Errorf("registration location not found: %w", err)
+	} else if _, err := s.authorize(ctx, caller, loc.EventID); err != nil {
+		return RegistrationLocation{}, err
 	}
 
 	updated, err := s.repo.UpdateRegistrationLocation(ctx, id, req)
@@ -531,9 +615,15 @@ func (s *Service) UpdateRegistrationLocation(ctx context.Context, id uuid.UUID, 
 }
 
 // DeleteRegistrationLocation removes a registration location
-func (s *Service) DeleteRegistrationLocation(ctx context.Context, id uuid.UUID) error {
+func (s *Service) DeleteRegistrationLocation(ctx context.Context, caller *auth.Claims, id uuid.UUID) error {
 	if id == uuid.Nil {
 		return fmt.Errorf("invalid registration location ID")
+	}
+
+	if loc, err := s.repo.GetRegistrationLocation(ctx, id); err != nil {
+		return fmt.Errorf("registration location not found: %w", err)
+	} else if _, err := s.authorize(ctx, caller, loc.EventID); err != nil {
+		return err
 	}
 
 	if err := s.repo.DeleteRegistrationLocation(ctx, id); err != nil {
@@ -544,26 +634,24 @@ func (s *Service) DeleteRegistrationLocation(ctx context.Context, id uuid.UUID) 
 }
 
 // UpdateParticipantFields updates participant field configuration for an event
-func (s *Service) UpdateParticipantFields(ctx context.Context, eventID uuid.UUID, req UpdateParticipantFieldsRequest) error {
+func (s *Service) UpdateParticipantFields(ctx context.Context, caller *auth.Claims, eventID uuid.UUID, req UpdateParticipantFieldsRequest) error {
 	if eventID == uuid.Nil {
 		return fmt.Errorf("invalid event ID")
 	}
 
-	// Verify event exists
-	_, err := s.repo.GetEventByID(ctx, eventID)
-	if err != nil {
-		return fmt.Errorf("event not found: %w", err)
+	if _, err := s.authorize(ctx, caller, eventID); err != nil {
+		return err
 	}
 
 	// Validate field names
 	validFields := map[string]bool{
-		"country":            true,
-		"city":               true,
-		"state":              true,
-		"zip_code":           true,
-		"medical_info":       true,
-		"waiver_signed_at":   true,
-		"emergency_contact":  true,
+		"country":           true,
+		"city":              true,
+		"state":             true,
+		"zip_code":          true,
+		"medical_info":      true,
+		"waiver_signed_at":  true,
+		"emergency_contact": true,
 	}
 
 	for _, f := range req.Fields {
@@ -585,15 +673,13 @@ func (s *Service) GetFieldConfig(ctx context.Context, eventID uuid.UUID) ([]Even
 }
 
 // UpdateFieldConfig updates the field configuration for an event
-func (s *Service) UpdateFieldConfig(ctx context.Context, eventID uuid.UUID, req UpdateEventFieldConfigRequest) error {
+func (s *Service) UpdateFieldConfig(ctx context.Context, caller *auth.Claims, eventID uuid.UUID, req UpdateEventFieldConfigRequest) error {
 	if eventID == uuid.Nil {
 		return fmt.Errorf("invalid event ID")
 	}
 
-	// Verify event exists
-	_, err := s.repo.GetEventByID(ctx, eventID)
-	if err != nil {
-		return fmt.Errorf("event not found: %w", err)
+	if _, err := s.authorize(ctx, caller, eventID); err != nil {
+		return err
 	}
 
 	// Validate section names

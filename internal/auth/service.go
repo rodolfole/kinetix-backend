@@ -120,14 +120,14 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (TokenResponse, U
 		log.Printf("auth: could not update last login for user %s: %v", user.ID, err)
 	}
 
-	accessToken, err := GenerateToken(s.cfg, user.ID.String(), user.Role)
+	accessToken, refreshToken, expiresIn, err := s.issueTokensFor(Identity{
+		UserID:        user.ID.String(),
+		Role:          user.Role,
+		OrganizerID:   convert.PgUUIDToPtr(user.OrganizerID),
+		ParticipantID: convert.PgUUIDToPtr(user.ParticipantID),
+	})
 	if err != nil {
-		return TokenResponse{}, UserClaims{}, fmt.Errorf("failed to generate access token: %w", err)
-	}
-
-	refreshToken, err := GenerateRefreshToken(s.cfg, user.ID.String(), user.Role)
-	if err != nil {
-		return TokenResponse{}, UserClaims{}, fmt.Errorf("failed to generate refresh token: %w", err)
+		return TokenResponse{}, UserClaims{}, err
 	}
 
 	userClaims := UserClaims{
@@ -141,7 +141,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (TokenResponse, U
 	return TokenResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		ExpiresIn:    int64(s.cfg.TokenExpiry.Seconds()),
+		ExpiresIn:    expiresIn,
 	}, userClaims, nil
 }
 
@@ -194,7 +194,11 @@ func (s *Service) RegisterOrganizer(ctx context.Context, req RegisterOrganizerRe
 		return RegisterResponse{}, err
 	}
 
-	accessToken, refreshToken, expiresIn, err := s.issueTokensFor(user.ID.String(), user.Role)
+	accessToken, refreshToken, expiresIn, err := s.issueTokensFor(Identity{
+		UserID:      user.ID.String(),
+		Role:        user.Role,
+		OrganizerID: &organizer.ID,
+	})
 	if err != nil {
 		return RegisterResponse{}, err
 	}
@@ -257,7 +261,11 @@ func (s *Service) RegisterParticipant(ctx context.Context, req RegisterParticipa
 		return RegisterResponse{}, err
 	}
 
-	accessToken, refreshToken, expiresIn, err := s.issueTokensFor(user.ID.String(), user.Role)
+	accessToken, refreshToken, expiresIn, err := s.issueTokensFor(Identity{
+		UserID:        user.ID.String(),
+		Role:          user.Role,
+		ParticipantID: &participant.ID,
+	})
 	if err != nil {
 		return RegisterResponse{}, err
 	}
@@ -296,7 +304,12 @@ func (s *Service) RefreshToken(ctx context.Context, refreshToken string) (TokenR
 		return TokenResponse{}, UserClaims{}, ErrUserInactive
 	}
 
-	accessToken, refreshToken, expiresIn, err := s.issueTokensFor(user.ID.String(), user.Role)
+	accessToken, refreshToken, expiresIn, err := s.issueTokensFor(Identity{
+		UserID:        user.ID.String(),
+		Role:          user.Role,
+		OrganizerID:   convert.PgUUIDToPtr(user.OrganizerID),
+		ParticipantID: convert.PgUUIDToPtr(user.ParticipantID),
+	})
 	if err != nil {
 		return TokenResponse{}, UserClaims{}, err
 	}
@@ -332,14 +345,14 @@ func isDuplicateKey(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
-// issueTokensFor builds the access/refresh token pair for a user.
-func (s *Service) issueTokensFor(userID, role string) (string, string, int64, error) {
-	accessToken, err := GenerateToken(s.cfg, userID, role)
+// issueTokensFor builds the access/refresh token pair for an identity.
+func (s *Service) issueTokensFor(id Identity) (string, string, int64, error) {
+	accessToken, err := GenerateToken(s.cfg, id)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, err := GenerateRefreshToken(s.cfg, userID, role)
+	refreshToken, err := GenerateRefreshToken(s.cfg, id)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("failed to generate refresh token: %w", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"kinetix-api/internal/json"
+	"kinetix-api/internal/middleware"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -79,7 +80,8 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	evt, err := h.service.Create(r.Context(), req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	evt, err := h.service.Create(r.Context(), claims, req)
 	if err != nil {
 		// Use json.WriteError so the error string is properly escaped.
 		// Previously we did `http.Error(w, `{"error":"`+err.Error()+`"}`, ...)`
@@ -189,7 +191,8 @@ func (h *Handler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	evt, err := h.service.Update(r.Context(), id, req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	evt, err := h.service.Update(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -217,7 +220,8 @@ func (h *Handler) UpdateEventStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	evt, err := h.service.UpdateStatus(r.Context(), id, body.Status)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	evt, err := h.service.UpdateStatus(r.Context(), claims, id, body.Status)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -243,7 +247,8 @@ func (h *Handler) UpdateParticipantFields(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.service.UpdateParticipantFields(r.Context(), id, req); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.UpdateParticipantFields(r.Context(), claims, id, req); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -284,7 +289,8 @@ func (h *Handler) UpdateFieldConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.UpdateFieldConfig(r.Context(), id, req); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.UpdateFieldConfig(r.Context(), claims, id, req); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -302,7 +308,8 @@ func (h *Handler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), id); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.Delete(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -322,7 +329,8 @@ func (h *Handler) CreateAward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	award, err := h.service.CreateAward(r.Context(), req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	award, err := h.service.CreateAward(r.Context(), claims, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -388,7 +396,8 @@ func (h *Handler) UpdateAward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	award, err := h.service.UpdateAward(r.Context(), id, req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	award, err := h.service.UpdateAward(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -408,7 +417,8 @@ func (h *Handler) DeleteAward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.DeleteAward(r.Context(), id); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.DeleteAward(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -428,7 +438,8 @@ func (h *Handler) CreatePricingStage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stage, err := h.service.CreatePricingStage(r.Context(), req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	stage, err := h.service.CreatePricingStage(r.Context(), claims, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -514,7 +525,8 @@ func (h *Handler) UpdatePricingStage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stage, err := h.service.UpdatePricingStage(r.Context(), id, req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	stage, err := h.service.UpdatePricingStage(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -534,7 +546,8 @@ func (h *Handler) DeletePricingStage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.DeletePricingStage(r.Context(), id); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.DeletePricingStage(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -554,7 +567,8 @@ func (h *Handler) CreateSponsor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sponsor, err := h.service.CreateSponsor(r.Context(), req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	sponsor, err := h.service.CreateSponsor(r.Context(), claims, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -620,7 +634,8 @@ func (h *Handler) UpdateSponsor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sponsor, err := h.service.UpdateSponsor(r.Context(), id, req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	sponsor, err := h.service.UpdateSponsor(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -640,7 +655,8 @@ func (h *Handler) DeleteSponsor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.DeleteSponsor(r.Context(), id); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.DeleteSponsor(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -660,7 +676,8 @@ func (h *Handler) CreateRegistrationLocation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	loc, err := h.service.CreateRegistrationLocation(r.Context(), req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	loc, err := h.service.CreateRegistrationLocation(r.Context(), claims, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -726,7 +743,8 @@ func (h *Handler) UpdateRegistrationLocation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	loc, err := h.service.UpdateRegistrationLocation(r.Context(), id, req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	loc, err := h.service.UpdateRegistrationLocation(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -746,7 +764,8 @@ func (h *Handler) DeleteRegistrationLocation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := h.service.DeleteRegistrationLocation(r.Context(), id); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.DeleteRegistrationLocation(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestGenerateToken(t *testing.T) {
@@ -13,7 +15,7 @@ func TestGenerateToken(t *testing.T) {
 		TokenExpiry: 1 * time.Hour,
 	}
 
-	token, err := GenerateToken(cfg, "user-123", "organizer")
+	token, err := GenerateToken(cfg, Identity{UserID: "user-123", Role: "organizer"})
 	if err != nil {
 		t.Fatalf("GenerateToken returned error: %v", err)
 	}
@@ -28,7 +30,7 @@ func TestValidateToken_Roundtrip(t *testing.T) {
 		TokenExpiry: 1 * time.Hour,
 	}
 
-	token, err := GenerateToken(cfg, "user-123", "participant")
+	token, err := GenerateToken(cfg, Identity{UserID: "user-123", Role: "participant"})
 	if err != nil {
 		t.Fatalf("GenerateToken returned error: %v", err)
 	}
@@ -50,7 +52,7 @@ func TestValidateToken_InvalidSecret(t *testing.T) {
 	cfg := Config{SecretKey: "test-secret-key", TokenExpiry: 1 * time.Hour}
 	cfg2 := Config{SecretKey: "different-secret", TokenExpiry: 1 * time.Hour}
 
-	token, err := GenerateToken(cfg, "user-123", "organizer")
+	token, err := GenerateToken(cfg, Identity{UserID: "user-123", Role: "organizer"})
 	if err != nil {
 		t.Fatalf("GenerateToken returned error: %v", err)
 	}
@@ -66,7 +68,7 @@ func TestValidateToken_Expired(t *testing.T) {
 		TokenExpiry: -1 * time.Second, // already expired
 	}
 
-	token, err := GenerateToken(cfg, "user-123", "organizer")
+	token, err := GenerateToken(cfg, Identity{UserID: "user-123", Role: "organizer"})
 	if err != nil {
 		t.Fatalf("GenerateToken returned error: %v", err)
 	}
@@ -78,7 +80,7 @@ func TestValidateToken_Expired(t *testing.T) {
 func TestGenerateRefreshToken_UsesRefreshTypeAndExpiry(t *testing.T) {
 	cfg := Config{SecretKey: "test-secret-key", TokenExpiry: time.Hour, RefreshExpiry: 7 * 24 * time.Hour}
 
-	token, err := GenerateRefreshToken(cfg, "user-123", "participant")
+	token, err := GenerateRefreshToken(cfg, Identity{UserID: "user-123", Role: "participant"})
 	if err != nil {
 		t.Fatalf("GenerateRefreshToken returned error: %v", err)
 	}
@@ -97,7 +99,7 @@ func TestGenerateRefreshToken_UsesRefreshTypeAndExpiry(t *testing.T) {
 func TestValidateAccessToken_RejectsRefreshToken(t *testing.T) {
 	cfg := Config{SecretKey: "test-secret-key", TokenExpiry: time.Hour, RefreshExpiry: 24 * time.Hour}
 
-	refresh, err := GenerateRefreshToken(cfg, "user-123", "organizer")
+	refresh, err := GenerateRefreshToken(cfg, Identity{UserID: "user-123", Role: "organizer"})
 	if err != nil {
 		t.Fatalf("GenerateRefreshToken returned error: %v", err)
 	}
@@ -109,7 +111,7 @@ func TestValidateAccessToken_RejectsRefreshToken(t *testing.T) {
 func TestValidateAccessToken_AcceptsAccessToken(t *testing.T) {
 	cfg := Config{SecretKey: "test-secret-key", TokenExpiry: time.Hour}
 
-	access, err := GenerateToken(cfg, "user-123", "organizer")
+	access, err := GenerateToken(cfg, Identity{UserID: "user-123", Role: "organizer"})
 	if err != nil {
 		t.Fatalf("GenerateToken returned error: %v", err)
 	}
@@ -125,7 +127,7 @@ func TestValidateAccessToken_AcceptsAccessToken(t *testing.T) {
 func TestValidateRefreshToken_RejectsAccessToken(t *testing.T) {
 	cfg := Config{SecretKey: "test-secret-key", TokenExpiry: time.Hour}
 
-	access, err := GenerateToken(cfg, "user-123", "organizer")
+	access, err := GenerateToken(cfg, Identity{UserID: "user-123", Role: "organizer"})
 	if err != nil {
 		t.Fatalf("GenerateToken returned error: %v", err)
 	}
@@ -138,11 +140,44 @@ func TestServiceRefreshToken_RejectsAccessToken(t *testing.T) {
 	cfg := Config{SecretKey: "test-secret-key", TokenExpiry: time.Hour}
 	svc := NewService(nil, cfg) // the store must not be reached
 
-	access, err := GenerateToken(cfg, "user-123", "organizer")
+	access, err := GenerateToken(cfg, Identity{UserID: "user-123", Role: "organizer"})
 	if err != nil {
 		t.Fatalf("GenerateToken returned error: %v", err)
 	}
 	if _, _, err := svc.RefreshToken(context.Background(), access); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
+	}
+}
+
+func TestGenerateToken_CarriesProfileClaims(t *testing.T) {
+	cfg := Config{SecretKey: "test-secret", TokenExpiry: time.Hour}
+	orgID := uuid.New()
+	partID := uuid.New()
+
+	token, err := GenerateToken(cfg, Identity{UserID: "u1", Role: "organizer", OrganizerID: &orgID, ParticipantID: &partID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := ValidateToken(cfg, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.OrganizerID == nil || *claims.OrganizerID != orgID {
+		t.Errorf("organizer claim = %v, want %s", claims.OrganizerID, orgID)
+	}
+	if claims.ParticipantID == nil || *claims.ParticipantID != partID {
+		t.Errorf("participant claim = %v, want %s", claims.ParticipantID, partID)
+	}
+
+	empty, err := GenerateToken(cfg, Identity{UserID: "u2", Role: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims2, err := ValidateToken(cfg, empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims2.OrganizerID != nil || claims2.ParticipantID != nil {
+		t.Errorf("admin identity must carry nil profile claims: %+v", claims2)
 	}
 }

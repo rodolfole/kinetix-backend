@@ -286,6 +286,20 @@ func (r *Repository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // GetDistance retrieves a distance by ID (used by awards/pricing validation)
+// EventOrganizerByDistance returns the organizer owning the event that the
+// distance belongs to (ownership authorization support).
+func (r *Repository) EventOrganizerByDistance(ctx context.Context, distanceID uuid.UUID) (uuid.UUID, error) {
+	d, err := r.GetDistance(ctx, distanceID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	e, err := r.GetEventByID(ctx, d.EventID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return e.OrganizerID, nil
+}
+
 func (r *Repository) GetDistance(ctx context.Context, id uuid.UUID) (Distance, error) {
 	dist, err := r.store.Queries.GetDistance(ctx, id)
 	if err != nil {
@@ -585,10 +599,10 @@ func (r *Repository) UpsertEventParticipantFields(ctx context.Context, eventID u
 	// Then insert new fields
 	for i, f := range fields {
 		_, err := r.store.Queries.UpsertEventParticipantField(ctx, repo.UpsertEventParticipantFieldParams{
-			EventID:     eventID,
-			FieldName:   f.FieldName,
-			IsRequired:  f.IsRequired,
-			IsEnabled:   f.IsEnabled,
+			EventID:      eventID,
+			FieldName:    f.FieldName,
+			IsRequired:   f.IsRequired,
+			IsEnabled:    f.IsEnabled,
 			DisplayOrder: pgtype.Int4{Int32: int32(i), Valid: true},
 		})
 		if err != nil {
@@ -736,11 +750,11 @@ func toSponsor(s repo.Sponsor) Sponsor {
 
 func toRunnerKitItem(k repo.RunnerKitItem) RunnerKitItem {
 	return RunnerKitItem{
-		ID:          k.ID,
-		EventID:     k.EventID,
-		Name:        k.Name,
-		Icon:        k.Icon,
-		CreatedAt:   convert.PgTimeToTime(k.CreatedAt),
+		ID:        k.ID,
+		EventID:   k.EventID,
+		Name:      k.Name,
+		Icon:      k.Icon,
+		CreatedAt: convert.PgTimeToTime(k.CreatedAt),
 	}
 }
 

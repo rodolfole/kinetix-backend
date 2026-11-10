@@ -2,6 +2,7 @@ package orders
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,12 @@ var validate = validator.New()
 // newRouter wires the handler Routes onto a fresh chi router. The service is
 // nil-repo so any test that reaches service.* would nil-deref; only test paths
 // that fail before reaching the service.
+
+// adminCtx attaches JWT claims with the admin role, as middleware would.
+func adminCtx(r *http.Request) *http.Request {
+	return r.WithContext(context.WithValue(context.Background(), middleware.ClaimsKey, &auth.Claims{UserID: "u-admin", Role: "admin"}))
+}
+
 func newRouter() (http.Handler, *Handler) {
 	svc := NewService(nil, nil, validate)
 	h := NewHandler(svc, "test-webhook-secret")
@@ -198,7 +205,7 @@ func TestList_NoQueryParamsReturns400(t *testing.T) {
 func TestUpdatePaymentInfo_BadUUIDReturns400(t *testing.T) {
 	r, _ := newRouter()
 	body, _ := json.Marshal(UpdateOrderPaymentInfoRequest{Status: "paid"})
-	req := httptest.NewRequest(http.MethodPut, "/not-a-uuid/payment", bytes.NewReader(body))
+	req := adminCtx(httptest.NewRequest(http.MethodPut, "/not-a-uuid/payment", bytes.NewReader(body)))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -210,7 +217,7 @@ func TestUpdatePaymentInfo_BadUUIDReturns400(t *testing.T) {
 func TestUpdatePaymentInfo_BadJSONReturns400(t *testing.T) {
 	r, _ := newRouter()
 	id := uuid.New().String()
-	req := httptest.NewRequest(http.MethodPut, "/"+id+"/payment", bytes.NewReader([]byte("{not-json")))
+	req := adminCtx(httptest.NewRequest(http.MethodPut, "/"+id+"/payment", bytes.NewReader([]byte("{not-json"))))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -222,7 +229,7 @@ func TestUpdatePaymentInfo_BadJSONReturns400(t *testing.T) {
 func TestUpdateStatus_BadUUIDReturns400(t *testing.T) {
 	r, _ := newRouter()
 	body, _ := json.Marshal(map[string]string{"status": "paid"})
-	req := httptest.NewRequest(http.MethodPut, "/not-a-uuid/status", bytes.NewReader(body))
+	req := adminCtx(httptest.NewRequest(http.MethodPut, "/not-a-uuid/status", bytes.NewReader(body)))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
@@ -234,7 +241,7 @@ func TestUpdateStatus_BadUUIDReturns400(t *testing.T) {
 func TestUpdateStatus_BadJSONReturns400(t *testing.T) {
 	r, _ := newRouter()
 	id := uuid.New().String()
-	req := httptest.NewRequest(http.MethodPut, "/"+id+"/status", bytes.NewReader([]byte("garbage")))
+	req := adminCtx(httptest.NewRequest(http.MethodPut, "/"+id+"/status", bytes.NewReader([]byte("garbage"))))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)

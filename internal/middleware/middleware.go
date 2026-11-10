@@ -71,6 +71,16 @@ func RequireRole(role string) func(http.Handler) http.Handler {
 	}
 }
 
+// ClaimsFrom returns the JWT claims stored by JWTAuth. ok is false for
+// unauthenticated requests.
+func ClaimsFrom(ctx context.Context) (*auth.Claims, bool) {
+	claims, ok := ctx.Value(ClaimsKey).(*auth.Claims)
+	if !ok {
+		return nil, false
+	}
+	return claims, true
+}
+
 // RequireAnyRole allows the request when the JWT role is one of roles.
 // Same contract as RequireRole: 401 without claims, 403 for other roles.
 func RequireAnyRole(roles ...string) func(http.Handler) http.Handler {

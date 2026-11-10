@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	db "kinetix-api/internal/adapters/postgresql/sqlc"
 	"kinetix-api/internal/config"
 	"kinetix-api/internal/database"
 	"kinetix-api/internal/database/convert"
-	db "kinetix-api/internal/adapters/postgresql/sqlc"
 	"kinetix-api/internal/distances"
 	"kinetix-api/internal/events"
 	"kinetix-api/internal/organizers"
@@ -284,9 +284,9 @@ func (s *Seeder) Run() error {
 	hashedPassword := string(hashBytes)
 
 	type userDef struct {
-		email        string
-		role         string
-		organizerID  *uuid.UUID
+		email         string
+		role          string
+		organizerID   *uuid.UUID
 		participantID *uuid.UUID
 	}
 
@@ -299,8 +299,8 @@ func (s *Seeder) Run() error {
 	for _, p := range createdParticipants {
 		p := p
 		userDefs = append(userDefs, userDef{
-			email:          p.Email,
-			role:           "participant",
+			email:         p.Email,
+			role:          "participant",
 			participantID: &p.ID,
 		})
 	}
@@ -407,7 +407,7 @@ func (s *Seeder) createEvent(ctx context.Context, organizerID uuid.UUID) (events
 		},
 	}
 
-	evt, err := service.Create(ctx, req)
+	evt, err := service.Create(ctx, nil, req) // seed has no claims; handler-level authz would reject, seed writes straight
 	if err != nil {
 		return events.Event{}, fmt.Errorf("failed to create event: %w", err)
 	}
@@ -796,9 +796,9 @@ func (s *Seeder) createRunnerKits(ctx context.Context, eventID uuid.UUID) {
 
 	for _, k := range kitItems {
 		_, err := s.store.Queries.CreateRunnerKitItem(ctx, db.CreateRunnerKitItemParams{
-			EventID:     eventID,
-			Name:        k.name,
-			Icon:        k.icon,
+			EventID: eventID,
+			Name:    k.name,
+			Icon:    k.icon,
 		})
 		if err != nil {
 			log.Printf("    Warning: failed to create runner kit item '%s': %v", k.name, err)
@@ -862,7 +862,7 @@ func (s *Seeder) createOrGetEvent(ctx context.Context, organizerID uuid.UUID, na
 		LogoURL:      logoUrl,
 		Itinerary:    itinerary,
 	}
-	evt, err := service.Create(ctx, req)
+	evt, err := service.Create(ctx, nil, req) // seed has no claims; handler-level authz would reject, seed writes straight
 	if err != nil {
 		return events.Event{}, fmt.Errorf("failed to create event '%s': %w", name, err)
 	}
@@ -910,7 +910,7 @@ func (s *Seeder) createPricingStages(ctx context.Context, distances []db.Distanc
 			EndDate:     earlyBirdEnd,
 			IsEarlyBird: true,
 		}
-		if _, err := service.CreatePricingStage(ctx, earlyReq); err != nil {
+		if _, err := service.CreatePricingStage(ctx, nil, earlyReq); err != nil {
 			log.Printf("  Warning: failed to create early bird pricing: %v", err)
 		}
 
@@ -923,7 +923,7 @@ func (s *Seeder) createPricingStages(ctx context.Context, distances []db.Distanc
 			EndDate:     regEnd,
 			IsEarlyBird: false,
 		}
-		if _, err := service.CreatePricingStage(ctx, regReq); err != nil {
+		if _, err := service.CreatePricingStage(ctx, nil, regReq); err != nil {
 			log.Printf("  Warning: failed to create regular pricing: %v", err)
 		}
 
@@ -936,11 +936,10 @@ func (s *Seeder) createPricingStages(ctx context.Context, distances []db.Distanc
 			EndDate:     lateEnd,
 			IsEarlyBird: false,
 		}
-		if _, err := service.CreatePricingStage(ctx, lateReq); err != nil {
+		if _, err := service.CreatePricingStage(ctx, nil, lateReq); err != nil {
 			log.Printf("  Warning: failed to create late pricing: %v", err)
 		}
 	}
 
 	return nil
 }
-

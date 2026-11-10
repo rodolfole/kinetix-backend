@@ -96,13 +96,13 @@ func TestCreateEventRequest_Validate(t *testing.T) {
 
 func TestUpdateEventRequest_Validate(t *testing.T) {
 	base := UpdateEventRequest{
-		Name:         "Marathon 2026",
-		Slug:         "marathon-2026",
-		EventDate:    time.Date(2026, 6, 1, 8, 0, 0, 0, time.UTC),
-		Deadline:     time.Date(2026, 5, 1, 23, 59, 59, 0, time.UTC),
-		Address:      "123 Main Street, City",
-		Itinerary:    []ItineraryItem{{Key: "start", Time: "08:00", Icon: "flag"}},
-		Status:       "draft",
+		Name:      "Marathon 2026",
+		Slug:      "marathon-2026",
+		EventDate: time.Date(2026, 6, 1, 8, 0, 0, 0, time.UTC),
+		Deadline:  time.Date(2026, 5, 1, 23, 59, 59, 0, time.UTC),
+		Address:   "123 Main Street, City",
+		Itinerary: []ItineraryItem{{Key: "start", Time: "08:00", Icon: "flag"}},
+		Status:    "draft",
 	}
 
 	tests := []struct {
@@ -368,15 +368,15 @@ func TestUpdateEventFieldConfigRequest_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "missing fields",
-			req:  UpdateEventFieldConfigRequest{Fields: nil},
+			name:    "missing fields",
+			req:     UpdateEventFieldConfigRequest{Fields: nil},
 			wantErr: true,
 		},
 		{
 			// validator's "required" only rejects the zero value (nil slice);
 			// an explicitly-constructed empty (non-nil) slice passes.
-			name: "empty fields list passes (non-nil)",
-			req:  UpdateEventFieldConfigRequest{Fields: []EventFieldConfigInput{}},
+			name:    "empty fields list passes (non-nil)",
+			req:     UpdateEventFieldConfigRequest{Fields: []EventFieldConfigInput{}},
 			wantErr: false,
 		},
 		{
