@@ -132,3 +132,40 @@ func (c *Client) CreatePayout(organizerAccessToken string, req PayoutRequest) (*
 	}
 	return &out, nil
 }
+
+// PaymentConfirmation is the subset of MP's payment the webhook needs.
+type PaymentConfirmation struct {
+	ID                int64  `json:"id"`
+	Status            string `json:"status"`
+	StatusDetail      string `json:"status_detail"`
+	ExternalReference string `json:"external_reference"`
+}
+
+// GetPayment fetches a payment by id from the MP REST API using the
+// platform access token (MP_ACCESS_TOKEN). Webhooks must confirm the
+// payment status server-side; the notification body alone is untrusted.
+func (c *Client) GetPayment(paymentID string) (*PaymentConfirmation, error) {
+	if c.cfg.AccessToken == "" {
+		return nil, fmt.Errorf("MP_ACCESS_TOKEN not configured")
+	}
+	httpReq, err := http.NewRequest(http.MethodGet, c.apiBase+"/v1/payments/"+paymentID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("payment request build failed: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+c.cfg.AccessToken)
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("payment fetch failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(resp.Body)
+		return nil, fmt.Errorf("payment HTTP %d: %s", resp.StatusCode, buf.String())
+	}
+	var out PaymentConfirmation
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("payment decode failed: %w", err)
+	}
+	return &out, nil
+}
