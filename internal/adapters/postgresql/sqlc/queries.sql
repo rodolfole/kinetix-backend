@@ -160,9 +160,9 @@ WHERE id = $1;
 
 -- name: CreateAward :one
 INSERT INTO awards (
-    distance_id, age_category_id, gender, prize_amount
+    distance_id, age_category_id, gender, place, prize_amount
 ) VALUES (
-    $1, $2, $3, $4
+    $1, $2, $3, $4, $5
 ) RETURNING *;
 
 -- name: GetAward :one
@@ -176,7 +176,7 @@ ORDER BY age_category_id;
 
 -- name: UpdateAward :one
 UPDATE awards
-SET age_category_id = $2, gender = $3, prize_amount = $4
+SET age_category_id = $2, gender = $3, place = $4, prize_amount = $5
 WHERE id = $1
 RETURNING *;
 
@@ -629,3 +629,82 @@ SELECT * FROM routes WHERE distance_id = sqlc.arg(distance_id) ORDER BY name ASC
 
 -- name: DeleteRoute :exec
 DELETE FROM routes WHERE id = sqlc.arg(id);
+-- ===== platform_config =====
+
+-- name: GetPlatformConfig :one
+SELECT id, commission_pct, updated_at, updated_by FROM platform_config WHERE id = 1 LIMIT 1;
+
+-- name: UpdatePlatformConfig :one
+UPDATE platform_config
+   SET commission_pct = sqlc.arg(commission_pct),
+       updated_at = now(),
+       updated_by = sqlc.arg(updated_by)
+ WHERE id = 1
+RETURNING id, commission_pct, updated_at, updated_by;
+
+-- ===== organizer_payouts =====
+
+-- name: CreateOrganizerPayout :one
+INSERT INTO organizer_payouts (
+    organizer_id, order_id, amount_cents, currency, commission_pct
+) VALUES (
+    sqlc.arg(organizer_id), sqlc.arg(order_id), sqlc.arg(amount_cents),
+    sqlc.arg(currency), sqlc.arg(commission_pct)
+) RETURNING *;
+
+-- name: ListOrganizerPayouts :many
+SELECT id, organizer_id, order_id, amount_cents, currency, commission_pct,
+       status, mp_payout_id, failure_reason, created_at, sent_at
+  FROM organizer_payouts
+ ORDER BY created_at DESC
+ LIMIT sqlc.arg(limit_count);
+
+-- name: ListOrganizerPayoutsByStatus :many
+SELECT id, organizer_id, order_id, amount_cents, currency, commission_pct,
+       status, mp_payout_id, failure_reason, created_at, sent_at
+  FROM organizer_payouts
+ WHERE status = sqlc.arg(status)
+ ORDER BY created_at DESC
+ LIMIT sqlc.arg(limit_count);
+
+-- name: MarkOrganizerPayoutSent :one
+UPDATE organizer_payouts
+   SET status = 'sent',
+       mp_payout_id = sqlc.arg(mp_payout_id),
+       sent_at = now()
+ WHERE id = sqlc.arg(id)
+RETURNING *;
+
+-- name: MarkOrganizerPayoutFailed :one
+UPDATE organizer_payouts
+   SET status = 'failed',
+       failure_reason = sqlc.arg(failure_reason)
+ WHERE id = sqlc.arg(id)
+RETURNING *;
+
+-- name: GetOrganizerPayoutByID :one
+SELECT id, organizer_id, order_id, amount_cents, currency, commission_pct,
+       status, mp_payout_id, failure_reason, created_at, sent_at
+  FROM organizer_payouts
+ WHERE id = sqlc.arg(id) LIMIT 1;
+
+-- ===== organizer_mp_credentials =====
+
+-- name: GetOrganizerMPCredentials :one
+SELECT organizer_id, mp_user_id, access_token, refresh_token, expires_at, connected_at
+  FROM organizer_mp_credentials
+ WHERE organizer_id = sqlc.arg(organizer_id) LIMIT 1;
+
+-- name: UpsertOrganizerMPCredentials :one
+INSERT INTO organizer_mp_credentials (
+    organizer_id, mp_user_id, access_token, refresh_token, expires_at
+) VALUES (
+    sqlc.arg(organizer_id), sqlc.arg(mp_user_id), sqlc.arg(access_token),
+    sqlc.arg(refresh_token), sqlc.arg(expires_at)
+)
+ON CONFLICT (organizer_id) DO UPDATE SET
+    mp_user_id = EXCLUDED.mp_user_id,
+    access_token = EXCLUDED.access_token,
+    refresh_token = EXCLUDED.refresh_token,
+    expires_at = EXCLUDED.expires_at
+RETURNING *;
