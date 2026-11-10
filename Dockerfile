@@ -23,6 +23,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/kinetix
 # Build db-init helper (creates database before migrations)
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/kinetix-dbinit ./scripts
 
+# Build payouts cron job (PLAN-16 T16)
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/kinetix-payouts-cron ./cmd/payouts-cron
+
 # ---------- runtime stage ----------
 FROM alpine:3.20 AS runtime
 RUN apk add --no-cache ca-certificates tzdata curl postgresql-client && \
@@ -32,6 +35,7 @@ WORKDIR /app
 COPY --from=build /out/kinetix-api /app/kinetix-api
 COPY --from=build /out/kinetix-seed /app/kinetix-seed
 COPY --from=build /out/kinetix-dbinit /app/kinetix-dbinit
+COPY --from=build /out/kinetix-payouts-cron /app/kinetix-payouts-cron
 COPY --from=build /go/bin/goose /usr/local/bin/goose
 COPY internal/adapters/postgresql/migrations /app/migrations
 
@@ -42,9 +46,9 @@ ENV SERVER_HOST=0.0.0.0 \
     DB_NAME=kinetix-db \
     DB_USER=postgres \
     DB_PASSWORD=postgres \
-    DB_SSLMODE=disable \
+    DB_SSLMODE=disable
 
-
+USER app
 EXPOSE 8080
 
 # default: run API; docker-compose overrides command for init containers
