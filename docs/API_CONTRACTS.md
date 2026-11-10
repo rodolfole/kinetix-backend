@@ -46,7 +46,7 @@ Rules:
 
 ## Endpoints
 
-Legend: **P** public, **A** any authenticated user, **O** organizer (owner), **R** participant (owner), **AD** admin. "Target" is the access level to enforce; today every non-public route except `/admin/*` only checks **A**.
+Legend: **P** public, **A** any authenticated user, **O** organizer (owner), **R** participant (owner), **AD** admin. "Target" is the access level to enforce. Enforced today: `/admin/*` requires admin; every route in "Event management" requires role organizer or admin (`403 {"error":"insufficient role"}` otherwise) but ownership is not checked yet; the remaining protected routes only check **A**.
 
 ### System
 | Method | Path | Access | Response |
@@ -61,7 +61,7 @@ Legend: **P** public, **A** any authenticated user, **O** organizer (owner), **R
 | POST | `/auth/register/participant` | P | `{email, password, first_name, last_name, second_last_name, gender, birth_date, phone}` | `201` same as login; `409` |
 | POST | `/auth/refresh` | P | `{refresh_token}` | `200 {data: tokens}`; `401` invalid refresh token |
 
-Access tokens last 24h. Refresh tokens must carry `typ: "refresh"` and be rejected as access tokens (and vice versa).
+Access tokens last 24h and carry `typ: "access"`; refresh tokens last 7 days and carry `typ: "refresh"`. Protected routes reject refresh tokens (`401`) and `/auth/refresh` rejects access tokens (`401`). Access tokens issued before the `typ` claim are still accepted as access tokens.
 
 ### Catalogs and public event data
 | Method | Path | Access |
@@ -115,7 +115,7 @@ Field-level request schemas are the `*Request` structs with `validate` tags in e
 | Method | Path | Target access | Notes |
 |---|---|---|---|
 | POST | `/orders` | R | Body `{registration_id, participant_id, event_id, amount, currency}`. Target: server computes `amount` from the current pricing stage; client amount is ignored. |
-| GET | `/orders?event_id=\|participant_id=\|status=` | O / R | At least one filter, else `400` |
+| GET | `/orders?event_id=\|participant_id=\|status=` | O / R | At least one filter, else `400`; malformed `event_id`/`participant_id` UUID `400 {"error":"invalid event_id"}` |
 | GET | `/orders/{id}` | O / R | |
 | PUT | `/orders/{id}/payment`, `/orders/{id}/status` | AD | |
 | POST | `/orders/webhook` | P (signed) | See below |
@@ -123,9 +123,9 @@ Field-level request schemas are the `*Request` structs with `validate` tags in e
 **Webhook** `POST /orders/webhook`
 - Payload: `{action, application_id, type, data: {id}}`.
 - Signature: HMAC-SHA256 with `MP_WEBHOOK_SECRET`. Missing signature `401`, bad signature `403`, empty `data.id` `400`.
-- Must be idempotent: the same `data.id` processed twice changes nothing and returns `200`.
 - Target: verify MercadoPago's `x-signature` (`ts=...,v1=...` over `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`) and confirm the payment status with the MP payments API before marking the order `paid`.
-- An empty `MP_WEBHOOK_SECRET` must fail startup outside local development, never skip verification.
+- An empty `MP_WEBHOOK_SECRET` never skips verification: the webhook answers `503 {"error":"webhook verification not configured"}`.
+- Idempotent today: a notification for an order already `paid` returns `200` with the order unchanged and records no second payout.
 
 ### Admin (`RequireRole("admin")`)
 | Method | Path | Body / query | Response |

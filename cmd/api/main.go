@@ -229,7 +229,7 @@ func main() {
 				r.Delete("/events/locations/{id}", eventHandler.DeleteRegistrationLocation)
 
 				// Field config (protected) — togglable optional sections per event
-				// GET stays public (registered above); a second GET here would shadow it.
+				// GET is public (registered above); a second GET here would shadow it.
 				r.Put("/events/{id}/field-config", eventHandler.UpdateFieldConfig)
 
 				// Tags management (protected)
