@@ -182,21 +182,7 @@ func (h *Handler) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate webhook signature
-	if err := ValidateWebhookRequest(h.webhookSecret, r, body); err != nil {
-		if errors.Is(err, ErrWebhookNotConfigured) {
-			jsonlib.WriteError(w, http.StatusServiceUnavailable, ErrWebhookNotConfigured.Error())
-			return
-		}
-		if err == ErrMissingSignature {
-			http.Error(w, "missing webhook signature", http.StatusUnauthorized)
-			return
-		}
-		http.Error(w, "invalid webhook signature", http.StatusForbidden)
-		return
-	}
-
-	// Parse payload
+	// Parse payload first: MercadoPago signs over the notification data id.
 	var webhook PaymentWebhookRequest
 	if err := json.Unmarshal(body, &webhook); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -205,6 +191,20 @@ func (h *Handler) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 
 	if webhook.Data.ID == "" {
 		http.Error(w, "payment ID not found", http.StatusBadRequest)
+		return
+	}
+
+	// Validate webhook signature against the parsed notification id
+	if err := ValidateWebhookRequest(h.webhookSecret, r, body, webhook.Data.ID); err != nil {
+		if errors.Is(err, ErrWebhookNotConfigured) {
+			jsonlib.WriteError(w, http.StatusServiceUnavailable, ErrWebhookNotConfigured.Error())
+			return
+		}
+		if err == ErrMissingSignature {
+			jsonlib.WriteError(w, http.StatusUnauthorized, "missing webhook signature")
+			return
+		}
+		jsonlib.WriteError(w, http.StatusForbidden, "invalid webhook signature")
 		return
 	}
 

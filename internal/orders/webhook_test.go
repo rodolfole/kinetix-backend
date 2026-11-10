@@ -7,10 +7,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func computeHMAC(secret, body string) string {
@@ -21,20 +23,20 @@ func computeHMAC(secret, body string) string {
 
 func TestValidateMercadoPagoWebhook_EmptySecretFailsClosed(t *testing.T) {
 	// A missing secret must never disable verification.
-	if err := ValidateMercadoPagoWebhook("", "body", computeHMAC("", "body")); !errors.Is(err, ErrWebhookNotConfigured) {
+	if err := ValidateMercadoPagoWebhook("", "pay-1", "req-1", "1718625911", []string{"deadbeef"}); !errors.Is(err, ErrWebhookNotConfigured) {
 		t.Fatalf("expected ErrWebhookNotConfigured when secret is empty, got %v", err)
 	}
 }
 
 func TestValidateMercadoPagoWebhook_MissingSignature(t *testing.T) {
-	err := ValidateMercadoPagoWebhook("secret", "body", "")
+	err := ValidateMercadoPagoWebhook("secret", "pay-1", "req-1", "", []string{"deadbeef"})
 	if err != ErrMissingSignature {
 		t.Fatalf("expected ErrMissingSignature, got %v", err)
 	}
 }
 
 func TestValidateMercadoPagoWebhook_WrongSignature(t *testing.T) {
-	err := ValidateMercadoPagoWebhook("secret", "body", "deadbeef")
+	err := ValidateMercadoPagoWebhook("secret", "pay-1", "req-1", "1718625911", []string{"deadbeef"})
 	if err != ErrInvalidSignature {
 		t.Fatalf("expected ErrInvalidSignature, got %v", err)
 	}
@@ -42,70 +44,46 @@ func TestValidateMercadoPagoWebhook_WrongSignature(t *testing.T) {
 
 func TestValidateMercadoPagoWebhook_ValidSignature(t *testing.T) {
 	secret := "mp-access-token"
-	body := `{"type":"payment","data":{"id":"123"}}`
-	sig := computeHMAC(secret, body)
-	if err := ValidateMercadoPagoWebhook(secret, body, sig); err != nil {
+	ts := fmt.Sprintf("%d", time.Now().Unix())
+	sig := webhookSignature(secret, "123", "req-1", ts)
+	if err := ValidateMercadoPagoWebhook(secret, "123", "req-1", ts, []string{sig}); err != nil {
 		t.Fatalf("expected nil for valid signature, got %v", err)
 	}
 }
 
 func TestValidateMercadoPagoWebhook_BodyMismatch(t *testing.T) {
 	secret := "mp-access-token"
-	sig := computeHMAC(secret, "body-A")
-	// Verify against a different body
-	err := ValidateMercadoPagoWebhook(secret, "body-B", sig)
+	ts := fmt.Sprintf("%d", time.Now().Unix())
+	sig := webhookSignature(secret, "pay-A", "req-1", ts)
+	// Verify against a different notification id
+	err := ValidateMercadoPagoWebhook(secret, "pay-B", "req-1", ts, []string{sig})
 	if err != ErrInvalidSignature {
 		t.Fatalf("expected ErrInvalidSignature for tampered body, got %v", err)
 	}
 }
 
-func TestExtractSignatureFromRequest(t *testing.T) {
+func TestParseXSignature(t *testing.T) {
 	tests := []struct {
-		name    string
-		headers map[string]string
-		want    string
+		name      string
+		header    string
+		wantTS    string
+		wantV1    []string
+		wantFound bool
 	}{
-		{
-			name:    "X-Merchant-Token",
-			headers: map[string]string{"X-Merchant-Token": "abc"},
-			want:    "abc",
-		},
-		{
-			name:    "x-merchant-token fallback",
-			headers: map[string]string{"x-merchant-token": "low"},
-			want:    "low",
-		},
-		{
-			name:    "X-Signature fallback",
-			headers: map[string]string{"X-Signature": "sig"},
-			want:    "sig",
-		},
-		{
-			name:    "x-signature fallback",
-			headers: map[string]string{"x-signature": "lowsig"},
-			want:    "lowsig",
-		},
-		{
-			name:    "X-Merchant-Token wins over X-Signature",
-			headers: map[string]string{"X-Merchant-Token": "primary", "X-Signature": "secondary"},
-			want:    "primary",
-		},
-		{
-			name:    "none returns empty",
-			headers: map[string]string{},
-			want:    "",
-		},
+		{"single v1", "ts=1718625911,v1=abc123", "1718625911", []string{"abc123"}, true},
+		{"multiple v1", "ts=1718625911,v1=abc123,v1=def456", "1718625911", []string{"abc123", "def456"}, true},
+		{"spaced", "ts= 1718625911 , v1=abc123 ", "1718625911", []string{"abc123"}, true},
+		{"no v1", "ts=1718625911", "1718625911", nil, false},
+		{"garbage", "garbage", "", nil, false},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodPost, "/", nil)
-			for k, v := range tt.headers {
-				r.Header.Set(k, v)
+			ts, v1, ok := parseXSignature(tt.header)
+			if ok != tt.wantFound || ts != tt.wantTS {
+				t.Fatalf("ts=%q ok=%v, want %q/%v", ts, ok, tt.wantTS, tt.wantFound)
 			}
-			got := ExtractSignatureFromRequest(r)
-			if got != tt.want {
-				t.Errorf("got %q, want %q", got, tt.want)
+			if len(v1) != len(tt.wantV1) {
+				t.Fatalf("v1 = %v, want %v", v1, tt.wantV1)
 			}
 		})
 	}
@@ -119,14 +97,14 @@ func TestValidateWebhookRequest_Delegates(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/", nil)
 	r.Header.Set("X-Merchant-Token", sig)
 
-	if err := ValidateWebhookRequest(secret, r, []byte(body)); err != nil {
+	if err := ValidateWebhookRequest(secret, r, []byte(body), "pay-1"); err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
 }
 
 func TestValidateWebhookRequest_MissingSig(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/", nil)
-	err := ValidateWebhookRequest("secret", r, []byte("body"))
+	err := ValidateWebhookRequest("secret", r, []byte("body"), "pay-1")
 	if err != ErrMissingSignature {
 		t.Fatalf("expected ErrMissingSignature, got %v", err)
 	}
