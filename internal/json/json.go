@@ -14,12 +14,6 @@ func Write(w http.ResponseWriter, status int, data any) {
 	json.NewEncoder(w).Encode(data)
 }
 
-// AllowUnknownFields controls whether Read rejects unknown JSON fields.
-// Por defecto (false) mantenemos DisallowUnknownFields para detectar payloads
-// desalineados con el schema, pero quienes necesiten backward-compatibility
-// (p.ej. payloads opcionales) deben llamar ReadAllowUnknown explícitamente.
-var AllowUnknownFields = false
-
 // Read decodes a JSON request body into the provided data structure.
 // Devuelve el error completo del decoder en lugar de un string opaco,
 // así el handler puede mostrar al cliente el problema real (campo
@@ -30,9 +24,7 @@ func Read(r *http.Request, data any) error {
 		return err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
-	if !AllowUnknownFields {
-		decoder.DisallowUnknownFields()
-	}
+	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(data); err != nil {
 		return err
 	}

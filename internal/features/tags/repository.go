@@ -49,14 +49,4 @@ func (r *Repository) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// DeleteByNames removes tags by names for an event
-func (r *Repository) DeleteByNames(ctx context.Context, eventID uuid.UUID, names []string) error {
-	err := r.store.Queries.DeleteEventTagsByNames(ctx, db.DeleteEventTagsByNamesParams{
-		EventID: eventID,
-		Names:   names,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to delete event tags by names: %w", err)
-	}
-	return nil
-}
+// DeleteByNames removed — was unused
