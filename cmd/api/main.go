@@ -66,9 +66,13 @@ func main() {
 	appStore := store.NewStore(pool)
 
 	// Initialize JWT config
+	tokenExp, err := time.ParseDuration(cfg.JWT.TokenExpiry)
+	if err != nil || tokenExp <= 0 {
+		tokenExp = 24 * time.Hour
+	}
 	jwtCfg := auth.Config{
 		SecretKey:     cfg.JWT.SecretKey,
-		TokenExpiry:   24 * time.Hour,
+		TokenExpiry:   tokenExp,
 		RefreshExpiry: 7 * 24 * time.Hour,
 	}
 
@@ -91,11 +95,7 @@ func main() {
 
 	// Initialize auth service and handler
 	// JWT secret comes from config.Load() which panics if JWT_SECRET is not set
-	authCfg := auth.Config{
-		SecretKey:     cfg.JWT.SecretKey,
-		TokenExpiry:   24 * time.Hour,
-		RefreshExpiry: 7 * 24 * time.Hour,
-	}
+	authCfg := jwtCfg // single JWT configuration (was duplicated)
 	authService := auth.NewService(appStore, authCfg)
 	authHandler := auth.NewHandler(authService, validator)
 

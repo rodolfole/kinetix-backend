@@ -43,7 +43,7 @@ ENV SERVER_HOST=0.0.0.0 \
     DB_USER=postgres \
     DB_PASSWORD=postgres \
     DB_SSLMODE=disable \
-    GIN_MODE=release
+
 
 EXPOSE 8080
 
