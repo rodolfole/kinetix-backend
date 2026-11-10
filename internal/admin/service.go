@@ -12,12 +12,30 @@ import (
 	"kinetix-api/internal/mp"
 )
 
-// Service holds the business logic for the admin module.
-type Service struct {
-	repo *Repository
+// ServiceRepository is the data access the admin service needs (service seam).
+type ServiceRepository interface {
+	GetPlatformConfig(ctx context.Context) (db.PlatformConfig, error)
+	UpdatePlatformConfig(ctx context.Context, commissionPct float64, updatedBy string) (db.PlatformConfig, error)
+	ListPayouts(ctx context.Context, limit int32) ([]db.OrganizerPayout, error)
+	ListPayoutsByStatus(ctx context.Context, status string, limit int32) ([]db.OrganizerPayout, error)
+	GetPayoutByID(ctx context.Context, id uuid.UUID) (db.OrganizerPayout, error)
+	GetMPCredentials(ctx context.Context, id uuid.UUID) (db.OrganizerMpCredential, error)
+	UpsertMPCredentials(ctx context.Context, p db.UpsertOrganizerMPCredentialsParams) (db.OrganizerMpCredential, error)
+	MarkPayoutSent(ctx context.Context, id uuid.UUID, mpPayoutID string) (db.OrganizerPayout, error)
+	MarkPayoutFailed(ctx context.Context, id uuid.UUID, reason string) (db.OrganizerPayout, error)
 }
 
-func NewService(r *Repository) *Service {
+// PayoutGateway is the MP payout API the service uses (test seam).
+type PayoutGateway interface {
+	CreatePayout(organizerAccessToken string, req mp.PayoutRequest) (*mp.CreatePayoutResponse, error)
+}
+
+// Service holds the business logic for the admin module.
+type Service struct {
+	repo ServiceRepository
+}
+
+func NewService(r ServiceRepository) *Service {
 	return &Service{repo: r}
 }
 
@@ -74,7 +92,7 @@ func (s *Service) UpsertMPCredentials(ctx context.Context, organizerID uuid.UUID
 
 // SendPayout looks up the organizer's MP access_token, calls MP Payouts API
 // to disburse the amount, and marks the row sent (or failed with reason).
-func (s *Service) SendPayout(ctx context.Context, mpClient *mp.Client, payoutID uuid.UUID) error {
+func (s *Service) SendPayout(ctx context.Context, gateway PayoutGateway, payoutID uuid.UUID) error {
 	payout, err := s.repo.GetPayoutByID(ctx, payoutID)
 	if err != nil {
 		return err
@@ -89,7 +107,7 @@ func (s *Service) SendPayout(ctx context.Context, mpClient *mp.Client, payoutID 
 	if creds.AccessToken == "" {
 		return fmt.Errorf("organizer %s has empty MP access_token", payout.OrganizerID)
 	}
-	resp, err := mpClient.CreatePayout(creds.AccessToken, mp.PayoutRequest{
+	resp, err := gateway.CreatePayout(creds.AccessToken, mp.PayoutRequest{
 		Amount:            float64(payout.AmountCents) / 100.0,
 		ExternalReference: payoutID.String(),
 	})
