@@ -1,6 +1,6 @@
 # ADR-12: Money as integer cents
 
-- Status: Proposed
+- Status: Accepted (approved by product owner, 2026-11-06)
 - Date: 2026-11-06
 - Deciders: Kinetix team
 - Related: ADR-3, ADR-7, ADR-14, docs/DATABASE.md, docs/API_CONTRACTS.md

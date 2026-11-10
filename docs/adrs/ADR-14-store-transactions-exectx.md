@@ -1,6 +1,6 @@
 # ADR-14: Store transactions with ExecTx
 
-- Status: Proposed
+- Status: Accepted (approved by product owner, 2026-11-06)
 - Date: 2026-11-06
 - Deciders: Kinetix team
 - Related: ADR-3, ADR-7, ADR-8, ADR-12, docs/DATABASE.md, docs/PATTERNS.md
