@@ -59,7 +59,7 @@ type Award struct {
 	AgeCategoryID uuid.UUID `json:"age_category_id"`
 	Gender        string    `json:"gender"`
 	Place         int       `json:"place"`
-	PrizeAmount   float64   `json:"prize_amount"`
+	PrizeCents    int64     `json:"prize_cents"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
@@ -68,7 +68,7 @@ type PricingStage struct {
 	ID          uuid.UUID `json:"id"`
 	DistanceID  uuid.UUID `json:"distance_id"`
 	Name        string    `json:"name"`
-	Price       float64   `json:"price"`
+	PriceCents  int64     `json:"price_cents"`
 	StartDate   time.Time `json:"start_date"`
 	EndDate     time.Time `json:"end_date"`
 	IsEarlyBird bool      `json:"is_early_bird"`
@@ -201,8 +201,8 @@ type CreateAwardRequest struct {
 	AgeCategoryID uuid.UUID `json:"age_category_id" validate:"required"`
 	Gender        string    `json:"gender" validate:"required,oneof=male female general"`
 	// Posición del lugar (1 = primer lugar). Default 1 si el caller omite.
-	Place       int     `json:"place" validate:"omitempty,gte=1,lte=20"`
-	PrizeAmount float64 `json:"prize_amount" validate:"required,gte=0"`
+	Place      int   `json:"place" validate:"omitempty,gte=1,lte=20"`
+	PrizeCents int64 `json:"prize_cents" validate:"required,gte=0"`
 }
 
 // UpdateAwardRequest represents the request body for updating an award
@@ -210,14 +210,14 @@ type UpdateAwardRequest struct {
 	AgeCategoryID uuid.UUID `json:"age_category_id" validate:"required"`
 	Gender        string    `json:"gender" validate:"required,oneof=male female general"`
 	Place         int       `json:"place" validate:"omitempty,gte=1,lte=20"`
-	PrizeAmount   float64   `json:"prize_amount" validate:"required,gte=0"`
+	PrizeCents    int64     `json:"prize_cents" validate:"required,gte=0"`
 }
 
 // CreatePricingStageRequest represents the request body for creating a pricing stage
 type CreatePricingStageRequest struct {
 	DistanceID  uuid.UUID `json:"distance_id" validate:"required"`
 	Name        string    `json:"name" validate:"omitempty,max=100"`
-	Price       float64   `json:"price" validate:"required,gte=0"`
+	PriceCents  int64     `json:"price_cents" validate:"required,gte=0"`
 	StartDate   time.Time `json:"start_date" validate:"required"`
 	EndDate     time.Time `json:"end_date" validate:"required"`
 	IsEarlyBird bool      `json:"is_early_bird"`
@@ -226,7 +226,7 @@ type CreatePricingStageRequest struct {
 // UpdatePricingStageRequest represents the request body for updating a pricing stage
 type UpdatePricingStageRequest struct {
 	Name        string    `json:"name" validate:"omitempty,max=100"`
-	Price       float64   `json:"price" validate:"required,gte=0"`
+	PriceCents  int64     `json:"price_cents" validate:"required,gte=0"`
 	StartDate   time.Time `json:"start_date" validate:"required"`
 	EndDate     time.Time `json:"end_date" validate:"required"`
 	IsEarlyBird bool      `json:"is_early_bird"`

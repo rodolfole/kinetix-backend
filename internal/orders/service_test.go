@@ -66,7 +66,7 @@ func pendingOrder() Order {
 		ID:            uuid.New(),
 		ParticipantID: uuid.New(),
 		EventID:       uuid.New(),
-		Amount:        500,
+		AmountCents:   50000,
 		Currency:      "MXN",
 		Status:        "pending",
 	}
@@ -127,7 +127,7 @@ func TestProcessWebhook_AlreadyPaidIsIdempotent(t *testing.T) {
 
 func TestProcessWebhook_PayoutCentsAreRoundedNotTruncated(t *testing.T) {
 	order := pendingOrder()
-	order.Amount = 19.99 // 19.99*100 == 1998.9999... in float64
+	order.AmountCents = 1999 // was: 19.99 float truncation hazard
 	repo := &fakeOrderRepo{order: order, organizerID: uuid.New()}
 	parentPayout := &fakePayoutRepo{commissionPct: 0}
 	tx := &fakePaidTx{parentOrder: repo, parentPayout: parentPayout}

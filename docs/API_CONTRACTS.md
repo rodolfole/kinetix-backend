@@ -9,7 +9,7 @@ Base URL: `/api/v1`. JSON over HTTP. This file is the contract the frontend code
 - Unknown fields are rejected (`json.Read` uses `DisallowUnknownFields`). Trailing bytes are rejected.
 - IDs are UUID v4 in the path. A malformed UUID returns `400`.
 - Dates: `YYYY-MM-DD`. Timestamps: RFC 3339 UTC.
-- Money: decimal number in MXN with 2 decimals (`"amount": 450.00`). Payouts use integer cents (`amount_cents`). See [ADR-12](adrs/ADR-12-money-as-integer-cents.md).
+- Money: integer cents everywhere (`"amount_cents": 45000` for MXN 450.00) per ADR-12 (orders since 2026-11-06). `pricing_stages` exposes `price_cents` and awards `prize_cents`. Legacy endpoints that still used `amount`/`price`/`prize_amount` decimals were migrated in the same change; the frontend must divide by 100 for display.
 
 ### Authentication
 - `Authorization: Bearer <access_token>` on every protected route.

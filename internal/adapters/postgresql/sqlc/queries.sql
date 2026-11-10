@@ -160,7 +160,7 @@ WHERE id = $1;
 
 -- name: CreateAward :one
 INSERT INTO awards (
-    distance_id, age_category_id, gender, place, prize_amount
+    distance_id, age_category_id, gender, place, prize_cents
 ) VALUES (
     $1, $2, $3, $4, $5
 ) RETURNING *;
@@ -176,7 +176,7 @@ ORDER BY age_category_id;
 
 -- name: UpdateAward :one
 UPDATE awards
-SET age_category_id = $2, gender = $3, place = $4, prize_amount = $5
+SET age_category_id = $2, gender = $3, place = $4, prize_cents = $5
 WHERE id = $1
 RETURNING *;
 
@@ -189,7 +189,7 @@ WHERE id = $1;
 
 -- name: CreatePricingStage :one
 INSERT INTO pricing_stages (
-    distance_id, name, price, start_date, end_date, is_early_bird
+    distance_id, name, price_cents, start_date, end_date, is_early_bird
 ) VALUES (
     $1, $2, $3, $4, $5, $6
 ) RETURNING *;
@@ -208,11 +208,11 @@ SELECT * FROM pricing_stages
 WHERE distance_id = $1
   AND start_date <= CURRENT_DATE
   AND end_date >= CURRENT_DATE
-ORDER BY price ASC;
+ORDER BY price_cents ASC;
 
 -- name: UpdatePricingStage :one
 UPDATE pricing_stages
-SET name = $2, price = $3, start_date = $4, end_date = $5, is_early_bird = $6
+SET name = $2, price_cents = $3, start_date = $4, end_date = $5, is_early_bird = $6
 WHERE id = $1
 RETURNING *;
 
@@ -337,7 +337,7 @@ WHERE id = $1;
 
 -- name: CreateOrder :one
 INSERT INTO orders (
-    registration_id, participant_id, event_id, amount, currency,
+    registration_id, participant_id, event_id, amount_cents, currency,
     status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id,
     transaction_date
 ) VALUES (

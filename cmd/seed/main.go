@@ -561,12 +561,11 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 				log.Printf("    Skipping pricing stages — already exist for distance %s", d.ID)
 				continue
 			}
-			basePrice := 4500.0
 			// Early bird (10% discount)
 			if _, err := s.store.Queries.CreatePricingStage(ctx, db.CreatePricingStageParams{
 				DistanceID:  d.ID,
 				Name:        pgtype.Text{String: "Early Bird", Valid: true},
-				Price:       convert.ToPgNumeric(basePrice * 0.9),
+				PriceCents:  405000, // 4500.00 * 0.9
 				StartDate:   time.Date(2024, 9, 1, 0, 0, 0, 0, time.UTC),
 				EndDate:     time.Date(2024, 10, 1, 23, 59, 59, 0, time.UTC),
 				IsEarlyBird: pgtype.Bool{Bool: true, Valid: true},
@@ -577,7 +576,7 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 			if _, err := s.store.Queries.CreatePricingStage(ctx, db.CreatePricingStageParams{
 				DistanceID:  d.ID,
 				Name:        pgtype.Text{String: "Regular", Valid: true},
-				Price:       convert.ToPgNumeric(basePrice),
+				PriceCents:  450000,
 				StartDate:   time.Date(2024, 10, 2, 0, 0, 0, 0, time.UTC),
 				EndDate:     valenciaDate,
 				IsEarlyBird: pgtype.Bool{Bool: false, Valid: true},
@@ -636,11 +635,10 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 				// Pricing stages for Neon Dash (regular only)
 				existingStages, _ := s.store.Queries.ListPricingStagesByDistance(ctx, dist.ID)
 				if len(existingStages) == 0 {
-					basePrice := 4500.0
 					if _, err := s.store.Queries.CreatePricingStage(ctx, db.CreatePricingStageParams{
 						DistanceID:  dist.ID,
 						Name:        pgtype.Text{String: "Regular", Valid: true},
-						Price:       convert.ToPgNumeric(basePrice),
+						PriceCents:  450000,
 						StartDate:   neonDate.AddDate(0, -1, 0),
 						EndDate:     neonDate,
 						IsEarlyBird: pgtype.Bool{Bool: false, Valid: true},
@@ -720,7 +718,7 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 					if _, err := s.store.Queries.CreatePricingStage(ctx, db.CreatePricingStageParams{
 						DistanceID:  dist.ID,
 						Name:        pgtype.Text{String: "Regular", Valid: true},
-						Price:       convert.ToPgNumeric(6000.0),
+						PriceCents:  600000,
 						StartDate:   summitDate.AddDate(0, -1, 0),
 						EndDate:     summitDate,
 						IsEarlyBird: pgtype.Bool{Bool: false, Valid: true},
@@ -895,17 +893,17 @@ func (s *Seeder) createPricingStages(ctx context.Context, distances []db.Distanc
 			continue
 		}
 
-		basePrice := 350.0
+		basePriceCents := int64(35000) // integer cents (ADR-12)
 		km := convert.PgNumericToFloat64(distance.Km)
 		if km >= 21.1 {
-			basePrice = 500.0
+			basePriceCents = int64(50000)
 		}
 
 		// Early bird stage
 		earlyReq := events.CreatePricingStageRequest{
 			DistanceID:  distance.ID,
 			Name:        "Early Bird - Preventa",
-			Price:       basePrice * 0.8, // 20% discount
+			PriceCents:  basePriceCents * 80 / 100, // 20% discount
 			StartDate:   earlyBirdStart,
 			EndDate:     earlyBirdEnd,
 			IsEarlyBird: true,
@@ -918,7 +916,7 @@ func (s *Seeder) createPricingStages(ctx context.Context, distances []db.Distanc
 		regReq := events.CreatePricingStageRequest{
 			DistanceID:  distance.ID,
 			Name:        "Precio Regular",
-			Price:       basePrice,
+			PriceCents:  basePriceCents,
 			StartDate:   regStart,
 			EndDate:     regEnd,
 			IsEarlyBird: false,
@@ -931,7 +929,7 @@ func (s *Seeder) createPricingStages(ctx context.Context, distances []db.Distanc
 		lateReq := events.CreatePricingStageRequest{
 			DistanceID:  distance.ID,
 			Name:        "Precio Tardío",
-			Price:       basePrice * 1.3, // 30% surcharge
+			PriceCents:  basePriceCents * 130 / 100, // 30% surcharge
 			StartDate:   lateStart,
 			EndDate:     lateEnd,
 			IsEarlyBird: false,

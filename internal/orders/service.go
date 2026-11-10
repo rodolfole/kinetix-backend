@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math"
 	"strings"
 
 	"kinetix-api/internal/mp"
@@ -221,7 +220,7 @@ func (s *Service) recordOrganizerPayoutWith(ctx context.Context, payoutRepo Payo
 	if err != nil {
 		return fmt.Errorf("read commission: %w", err)
 	}
-	totalCents := int64(math.Round(order.Amount * 100)) // order.Amount is in major units (e.g. MXN)
+	totalCents := order.AmountCents // already integer cents (ADR-12)
 	netCents := admin.CalculatePayoutAmount(totalCents, f8.Float64)
 
 	if _, err := payoutRepo.CreatePayout(ctx, db.CreateOrganizerPayoutParams{

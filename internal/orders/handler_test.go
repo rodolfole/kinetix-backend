@@ -52,7 +52,7 @@ func validCreateOrder() CreateOrderRequest {
 		RegistrationID: uuid.New(),
 		ParticipantID:  uuid.New(),
 		EventID:        uuid.New(),
-		Amount:         100.50,
+		AmountCents:    10050,
 		Currency:       "MXN",
 	}
 }
@@ -80,12 +80,12 @@ func TestCreateOrderRequest_Validate(t *testing.T) {
 		},
 		{
 			name:    "negative amount",
-			req:     func() CreateOrderRequest { r := validCreateOrder(); r.Amount = -1; return r }(),
+			req:     func() CreateOrderRequest { r := validCreateOrder(); r.AmountCents = -1; return r }(),
 			wantErr: true,
 		},
 		{
 			name:    "zero amount",
-			req:     func() CreateOrderRequest { r := validCreateOrder(); r.Amount = 0; return r }(),
+			req:     func() CreateOrderRequest { r := validCreateOrder(); r.AmountCents = 0; return r }(),
 			wantErr: true,
 		},
 		{

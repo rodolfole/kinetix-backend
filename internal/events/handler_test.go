@@ -144,7 +144,7 @@ func TestCreateAwardRequest_Validate(t *testing.T) {
 		AgeCategoryID: uuid.New(),
 		Gender:        "male",
 		Place:         1,
-		PrizeAmount:   1000,
+		PrizeCents:   1000,
 	}
 
 	tests := []struct {
@@ -159,7 +159,7 @@ func TestCreateAwardRequest_Validate(t *testing.T) {
 		{name: "missing distance", mutate: func(r *CreateAwardRequest) { r.DistanceID = uuid.Nil }, wantErr: true},
 		{name: "missing age category", mutate: func(r *CreateAwardRequest) { r.AgeCategoryID = uuid.Nil }, wantErr: true},
 		{name: "missing gender", mutate: func(r *CreateAwardRequest) { r.Gender = "" }, wantErr: true},
-		{name: "negative prize", mutate: func(r *CreateAwardRequest) { r.PrizeAmount = -1 }, wantErr: true},
+		{name: "negative prize", mutate: func(r *CreateAwardRequest) { r.PrizeCents = -1 }, wantErr: true},
 		{name: "place too low", mutate: func(r *CreateAwardRequest) { r.Place = -1 }, wantErr: true},
 		{name: "place too high", mutate: func(r *CreateAwardRequest) { r.Place = 21 }, wantErr: true},
 		{name: "place at top", mutate: func(r *CreateAwardRequest) { r.Place = 20 }, wantErr: false},
@@ -185,7 +185,7 @@ func TestUpdateAwardRequest_Validate(t *testing.T) {
 		AgeCategoryID: uuid.New(),
 		Gender:        "female",
 		Place:         2,
-		PrizeAmount:   500,
+		PrizeCents:   500,
 	}
 
 	tests := []struct {
@@ -196,7 +196,7 @@ func TestUpdateAwardRequest_Validate(t *testing.T) {
 		{name: "valid", mutate: func(r *UpdateAwardRequest) {}, wantErr: false},
 		{name: "invalid gender", mutate: func(r *UpdateAwardRequest) { r.Gender = "x" }, wantErr: true},
 		{name: "missing age category", mutate: func(r *UpdateAwardRequest) { r.AgeCategoryID = uuid.Nil }, wantErr: true},
-		{name: "negative prize", mutate: func(r *UpdateAwardRequest) { r.PrizeAmount = -10 }, wantErr: true},
+		{name: "negative prize", mutate: func(r *UpdateAwardRequest) { r.PrizeCents = -10 }, wantErr: true},
 		{name: "place -1 invalid", mutate: func(r *UpdateAwardRequest) { r.Place = -1 }, wantErr: true},
 		{name: "place 21 invalid", mutate: func(r *UpdateAwardRequest) { r.Place = 21 }, wantErr: true},
 	}
@@ -220,7 +220,7 @@ func TestCreatePricingStageRequest_Validate(t *testing.T) {
 	base := CreatePricingStageRequest{
 		DistanceID: uuid.New(),
 		Name:       "Early bird",
-		Price:      500,
+		PriceCents: 50000,
 		StartDate:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 		EndDate:    time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
 	}
@@ -234,7 +234,7 @@ func TestCreatePricingStageRequest_Validate(t *testing.T) {
 		{name: "missing distance", mutate: func(r *CreatePricingStageRequest) { r.DistanceID = uuid.Nil }, wantErr: true},
 		{name: "missing start_date", mutate: func(r *CreatePricingStageRequest) { r.StartDate = time.Time{} }, wantErr: true},
 		{name: "missing end_date", mutate: func(r *CreatePricingStageRequest) { r.EndDate = time.Time{} }, wantErr: true},
-		{name: "negative price", mutate: func(r *CreatePricingStageRequest) { r.Price = -1 }, wantErr: true},
+		{name: "negative price", mutate: func(r *CreatePricingStageRequest) { r.PriceCents = -1 }, wantErr: true},
 		{name: "name too long", mutate: func(r *CreatePricingStageRequest) {
 			r.Name = strings.Repeat("a", 101)
 		}, wantErr: true},
