@@ -39,6 +39,10 @@ type MercadoPagoConfig struct {
 	AccessToken   string
 	PublicKey     string
 	WebhookSecret string
+	// Marketplace OAuth + payouts (placeholders; fill in when MP app is registered)
+	ClientID     string
+	ClientSecret string
+	RedirectURI  string
 }
 
 // Load loads configuration from environment variables
@@ -70,6 +74,9 @@ func Load() Config {
 			AccessToken:   getEnv("MP_ACCESS_TOKEN", ""),
 			PublicKey:     getEnv("MP_PUBLIC_KEY", ""),
 			WebhookSecret: getEnv("MP_WEBHOOK_SECRET", ""),
+			ClientID:      getEnv("MP_CLIENT_ID", ""),
+			ClientSecret:  getEnv("MP_CLIENT_SECRET", ""),
+			RedirectURI:   getEnv("MP_REDIRECT_URI", "http://localhost:8085/api/v1/admin/organizers/callback"),
 		},
 	}
 }
