@@ -30,7 +30,7 @@ func adminCtx(r *http.Request) *http.Request {
 }
 
 func newRouter() (http.Handler, *Handler) {
-	svc := NewService(nil, nil, validate)
+	svc := NewService(nil, nil, nil, validate)
 	h := NewHandler(svc, "test-webhook-secret", nil)
 	r := chi.NewRouter()
 	h.Routes(r)

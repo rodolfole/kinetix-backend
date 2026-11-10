@@ -131,7 +131,7 @@ func mpPayload(paymentID string) []byte {
 }
 
 func TestPaymentWebhook_MissingSignatureReturns401(t *testing.T) {
-	svc := NewService(nil, nil, nil)
+	svc := NewService(nil, nil, nil, nil)
 	h := NewHandler(svc, "mp-secret", nil)
 
 	body := mpPayload("pay-123")
@@ -147,7 +147,7 @@ func TestPaymentWebhook_MissingSignatureReturns401(t *testing.T) {
 }
 
 func TestPaymentWebhook_WrongSignatureReturns403(t *testing.T) {
-	svc := NewService(nil, nil, nil)
+	svc := NewService(nil, nil, nil, nil)
 	h := NewHandler(svc, "mp-secret", nil)
 
 	body := mpPayload("pay-123")
@@ -165,7 +165,7 @@ func TestPaymentWebhook_WrongSignatureReturns403(t *testing.T) {
 
 func TestPaymentWebhook_ValidSignatureEmptyPaymentIDReturns400(t *testing.T) {
 	secret := "mp-access-token"
-	svc := NewService(nil, nil, nil)
+	svc := NewService(nil, nil, nil, nil)
 	h := NewHandler(svc, secret, nil)
 
 	// Send payload with empty data.id
@@ -184,7 +184,7 @@ func TestPaymentWebhook_ValidSignatureEmptyPaymentIDReturns400(t *testing.T) {
 
 func TestPaymentWebhook_ValidSignatureInvalidJSONReturns400(t *testing.T) {
 	secret := "mp-access-token"
-	svc := NewService(nil, nil, nil)
+	svc := NewService(nil, nil, nil, nil)
 	h := NewHandler(svc, secret, nil)
 
 	body := []byte(`not json`)

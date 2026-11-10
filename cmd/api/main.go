@@ -85,7 +85,7 @@ func main() {
 	eventService := events.NewService(eventRepo, validator)
 	participantService := participants.NewService(participantRepo, validator)
 	registrationService := registrations.NewService(registrationRepo, appStore, validator)
-	orderService := orders.NewService(orderRepo, adminRepo, validator)
+	orderService := orders.NewService(orderRepo, adminRepo, orders.NewPaidTxRunner(appStore), validator)
 	adminService := admin.NewService(adminRepo)
 	mpClient := mp.NewClient(cfg.MercadoPago)
 

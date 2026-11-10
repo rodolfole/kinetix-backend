@@ -13,7 +13,9 @@ import (
 	"github.com/google/uuid"
 
 	db "kinetix-api/internal/adapters/postgresql/sqlc"
+	sqlc "kinetix-api/internal/adapters/postgresql/sqlc"
 	"kinetix-api/internal/admin"
+	"kinetix-api/internal/store"
 )
 
 // OrderRepository is the data access the orders service needs.
@@ -38,11 +40,38 @@ type PayoutRepository interface {
 	CreatePayout(ctx context.Context, params db.CreateOrganizerPayoutParams) (db.OrganizerPayout, error)
 }
 
+// PaidOrderTx swaps BOTH repositories for transaction-scoped ones for the
+// duration of fn (store.ExecTx, ADR-14): the paid transition and its payout
+// land atomically.
+type PaidOrderTx interface {
+	ExecTx(ctx context.Context, fn func(OrderRepository, PayoutRepository) error) error
+}
+
+// PaidTxRunner adapts store.ExecTx when block-scoped repositories.
+type PaidTxRunner struct {
+	store *store.Store
+}
+
+// NewPaidTxRunner builds the transactional runner over the shared pool.
+func NewPaidTxRunner(s *store.Store) PaidOrderTx { return PaidTxRunner{store: s} }
+
+// ExecTx ( PaidOrderTx ) runs fn with both repositories scoped to a single transaction.
+func (r PaidTxRunner) ExecTx(ctx context.Context, fn func(OrderRepository, PayoutRepository) error) error {
+	return r.store.ExecTx(ctx, func(q *sqlc.Queries) error {
+		orderRepo := &Repository{store: r.store.WithQueries(q)}
+		adminRepo := admin.NewRepository(r.store.WithQueries(q))
+		return fn(orderRepo, adminRepo)
+	})
+}
+
 // Service handles business logic for orders
 type Service struct {
 	repo      OrderRepository
 	adminRepo PayoutRepository
 	validator *validator.Validate
+	// tx (optional) executes the paid transition and payout atomically.
+	// When nil, the legacy non-transactional path applies.
+	tx PaidOrderTx
 	// logPayoutError reports a payout that could not be recorded. The order
 	// stays paid; the failure must be visible so it can be reconciled.
 	logPayoutError func(order Order, err error)
@@ -55,8 +84,8 @@ func defaultLogPayoutError(order Order, err error) {
 // NewService creates a new orders service.
 // adminRepo is the admin module's repo (used to read commission and create
 // organizer_payouts rows). Can be nil in tests that don't reach ProcessWebhook.
-func NewService(repo OrderRepository, adminRepo *admin.Repository, validator *validator.Validate) *Service {
-	s := &Service{repo: repo, validator: validator, logPayoutError: defaultLogPayoutError}
+func NewService(repo OrderRepository, adminRepo *admin.Repository, tx PaidOrderTx, validator *validator.Validate) *Service {
+	s := &Service{repo: repo, validator: validator, tx: tx, logPayoutError: defaultLogPayoutError}
 	if adminRepo != nil { // keep a nil *admin.Repository as a nil interface
 		s.adminRepo = adminRepo
 	}
@@ -136,15 +165,30 @@ func (s *Service) ProcessWebhook(ctx context.Context, paymentID string, confirm 
 		return order, nil
 	}
 
+	// Atomic path: the paid transition and its payout share one transaction
+	// so a payout failure leaves the order pending for a later retry.
+	if s.tx != nil && s.adminRepo != nil {
+		err := s.tx.ExecTx(ctx, func(orderRepo OrderRepository, payoutRepo PayoutRepository) error {
+			updated, err := orderRepo.UpdateStatus(ctx, order.ID, "paid")
+			if err != nil {
+				return fmt.Errorf("failed to update order status: %w", err)
+			}
+			return s.recordOrganizerPayoutWith(ctx, payoutRepo, updated)
+		})
+		if err != nil {
+			return Order{}, err
+		}
+		return s.repo.GetByMercadoPagoPaymentID(ctx, paymentID)
+	}
+
+	// Legacy best-effort path (kept when no runner is configured).
 	updatedOrder, err := s.repo.UpdateStatus(ctx, order.ID, "paid")
 	if err != nil {
 		return Order{}, fmt.Errorf("failed to update order status: %w", err)
 	}
 
-	// After payment, record a pending organizer_payout (net of commission).
-	// The order is already paid, so a payout failure is reported, not returned.
 	if s.adminRepo != nil {
-		if err := s.recordOrganizerPayout(ctx, updatedOrder); err != nil {
+		if err := s.recordOrganizerPayoutWith(ctx, s.adminRepo, updatedOrder); err != nil {
 			s.reportPayoutError(updatedOrder, err)
 		}
 	}
@@ -160,15 +204,16 @@ func (s *Service) reportPayoutError(order Order, err error) {
 	defaultLogPayoutError(order, err)
 }
 
-// recordOrganizerPayout reads the current commission %, computes the net
+// recordOrganizerPayoutWith reads the current commission %, computes the net
 // amount in cents, and inserts a pending organizer_payout row for the
-// organizer that owns the order's event.
-func (s *Service) recordOrganizerPayout(ctx context.Context, order Order) error {
+// organizer that owns the order's event. It uses the provided
+// PayoutRepository (the tx-scoped one when running atomically).
+func (s *Service) recordOrganizerPayoutWith(ctx context.Context, payoutRepo PayoutRepository, order Order) error {
 	organizerID, err := s.repo.EventOrganizerID(ctx, order.EventID)
 	if err != nil {
 		return fmt.Errorf("resolve event organizer: %w", err)
 	}
-	cfg, err := s.adminRepo.GetPlatformConfig(ctx)
+	cfg, err := payoutRepo.GetPlatformConfig(ctx)
 	if err != nil {
 		return fmt.Errorf("read platform config: %w", err)
 	}
@@ -179,7 +224,7 @@ func (s *Service) recordOrganizerPayout(ctx context.Context, order Order) error 
 	totalCents := int64(math.Round(order.Amount * 100)) // order.Amount is in major units (e.g. MXN)
 	netCents := admin.CalculatePayoutAmount(totalCents, f8.Float64)
 
-	if _, err := s.adminRepo.CreatePayout(ctx, db.CreateOrganizerPayoutParams{
+	if _, err := payoutRepo.CreatePayout(ctx, db.CreateOrganizerPayoutParams{
 		OrganizerID:   organizerID,
 		OrderID:       order.ID,
 		AmountCents:   netCents,

@@ -76,8 +76,9 @@ func TestProcessWebhook_PayoutGoesToEventOrganizer(t *testing.T) {
 	order := pendingOrder()
 	organizerID := uuid.New()
 	repo := &fakeOrderRepo{order: order, organizerID: organizerID}
-	payouts := &fakePayoutRepo{commissionPct: 10}
-	svc := &Service{repo: repo, adminRepo: payouts}
+	parentPayout := &fakePayoutRepo{commissionPct: 10}
+	tx := &fakePaidTx{parentOrder: repo, parentPayout: parentPayout}
+	svc := &Service{repo: repo, adminRepo: parentPayout, tx: tx}
 
 	got, err := svc.ProcessWebhook(context.Background(), "mp-1", approvedConfirmation())
 	if err != nil {
@@ -86,10 +87,10 @@ func TestProcessWebhook_PayoutGoesToEventOrganizer(t *testing.T) {
 	if got.Status != "paid" {
 		t.Errorf("status = %q, want paid", got.Status)
 	}
-	if len(payouts.created) != 1 {
-		t.Fatalf("payouts created = %d, want 1", len(payouts.created))
+	if len(parentPayout.created) != 1 {
+		t.Fatalf("payouts created = %d, want 1", len(parentPayout.created))
 	}
-	p := payouts.created[0]
+	p := parentPayout.created[0]
 	if p.OrganizerID != organizerID {
 		t.Errorf("payout organizer = %s, want event organizer %s (participant was %s)", p.OrganizerID, organizerID, order.ParticipantID)
 	}
@@ -102,8 +103,9 @@ func TestProcessWebhook_AlreadyPaidIsIdempotent(t *testing.T) {
 	order := pendingOrder()
 	order.Status = "paid"
 	repo := &fakeOrderRepo{order: order, organizerID: uuid.New()}
-	payouts := &fakePayoutRepo{commissionPct: 10}
-	svc := &Service{repo: repo, adminRepo: payouts}
+	parentPayout := &fakePayoutRepo{commissionPct: 10}
+	tx := &fakePaidTx{parentOrder: repo, parentPayout: parentPayout}
+	svc := &Service{repo: repo, adminRepo: parentPayout, tx: tx}
 
 	got, err := svc.ProcessWebhook(context.Background(), "mp-1", approvedConfirmation())
 	if err != nil {
@@ -115,8 +117,11 @@ func TestProcessWebhook_AlreadyPaidIsIdempotent(t *testing.T) {
 	if len(repo.statusUpdates) != 0 {
 		t.Errorf("status updates = %v, want none", repo.statusUpdates)
 	}
-	if len(payouts.created) != 0 {
-		t.Errorf("payouts created = %d, want 0", len(payouts.created))
+	if len(parentPayout.created) != 0 {
+		t.Errorf("payouts created = %d, want 0", len(parentPayout.created))
+	}
+	if tx.invoked != 0 {
+		t.Errorf("an already-paid order must not enter the transaction, invoked %d", tx.invoked)
 	}
 }
 
@@ -124,14 +129,15 @@ func TestProcessWebhook_PayoutCentsAreRoundedNotTruncated(t *testing.T) {
 	order := pendingOrder()
 	order.Amount = 19.99 // 19.99*100 == 1998.9999... in float64
 	repo := &fakeOrderRepo{order: order, organizerID: uuid.New()}
-	payouts := &fakePayoutRepo{commissionPct: 0}
-	svc := &Service{repo: repo, adminRepo: payouts}
+	parentPayout := &fakePayoutRepo{commissionPct: 0}
+	tx := &fakePaidTx{parentOrder: repo, parentPayout: parentPayout}
+	svc := &Service{repo: repo, adminRepo: parentPayout, tx: tx}
 
 	if _, err := svc.ProcessWebhook(context.Background(), "mp-1", approvedConfirmation()); err != nil {
 		t.Fatalf("ProcessWebhook: %v", err)
 	}
-	if len(payouts.created) != 1 || payouts.created[0].AmountCents != 1999 {
-		t.Fatalf("payouts = %+v, want one payout of 1999 cents", payouts.created)
+	if len(parentPayout.created) != 1 || parentPayout.created[0].AmountCents != 1999 {
+		t.Fatalf("payouts = %+v, want one payout of 1999 cents", parentPayout.created)
 	}
 }
 
