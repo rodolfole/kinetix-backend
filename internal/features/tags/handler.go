@@ -6,7 +6,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"kinetix-api/internal/authz"
 	kinetixjson "kinetix-api/internal/json"
+	kinetixmw "kinetix-api/internal/middleware"
 )
 
 // Handler handles HTTP requests for event tags
@@ -63,6 +65,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	claims, _ := kinetixmw.ClaimsFrom(r.Context())
+	if e, oerr := h.repo.EventOrganizer(r.Context(), req.EventID); oerr != nil {
+		kinetixjson.Write(w, http.StatusBadRequest, map[string]string{"error": "event not found"})
+		return
+	} else if aerr := authz.CanManageEvent(claims, e); aerr != nil {
+		kinetixjson.Write(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
 	tag, err := h.repo.Create(r.Context(), req.EventID, req.Name)
 	if err != nil {
 		kinetixjson.Write(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -80,6 +91,15 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		kinetixjson.Write(w, http.StatusBadRequest, map[string]string{"error": "invalid tag ID"})
+		return
+	}
+
+	claims, _ := kinetixmw.ClaimsFrom(r.Context())
+	if e, oerr := h.repo.EventOrganizerByTag(r.Context(), id); oerr != nil {
+		kinetixjson.Write(w, http.StatusBadRequest, map[string]string{"error": "tag not found"})
+		return
+	} else if aerr := authz.CanManageEvent(claims, e); aerr != nil {
+		kinetixjson.Write(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 

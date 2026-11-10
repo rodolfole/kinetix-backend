@@ -78,13 +78,21 @@ func TestCreateDistanceRequest_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "surface too long",
-			req:     func() CreateDistanceRequest { r := validCreateDistance(); r.Surface = string(make([]byte, 51)); return r }(),
+			name: "surface too long",
+			req: func() CreateDistanceRequest {
+				r := validCreateDistance()
+				r.Surface = string(make([]byte, 51))
+				return r
+			}(),
 			wantErr: true, // validator cap is max=50, so 51 bytes exceeds it
 		},
 		{
 			name: "surface exactly 50",
-			req:  func() CreateDistanceRequest { r := validCreateDistance(); r.Surface = string(make([]byte, 50)); return r }(),
+			req: func() CreateDistanceRequest {
+				r := validCreateDistance()
+				r.Surface = string(make([]byte, 50))
+				return r
+			}(),
 			wantErr: false,
 		},
 	}

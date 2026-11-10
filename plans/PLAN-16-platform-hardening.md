@@ -1,6 +1,6 @@
 # PLAN-16: Platform hardening and completion (backend)
 
-- Status: In progress (T1-T3 done)
+- Status: In progress (T1-T3, T7-T8)
 - Created: 2026-11-06 | Updated: 2026-11-06
 - Spec: docs/specs/SPEC-platform-payments.md, docs/specs/SPEC-orders.md, docs/specs/SPEC-events.md
 - ADRs: ADR-6, ADR-7, ADR-12, ADR-14
@@ -28,8 +28,8 @@ Decisions embedded here live as ADRs: authorization model choice (ownership chec
 - [ ] T4 Characterization tests for `admin` service (config bounds, payouts list, `SendPayout` success/failure with a fake MP gateway) — test first: `internal/admin/service_test.go` — files: `internal/admin/`.
 - [ ] T5 Characterization tests for `registrations` service (create validation, duplicate registration, bib generation race) — test first: `internal/registrations/service_test.go` — files: `internal/registrations/`.
 - [ ] T6 Registration creation becomes transactional (participant + registration + bib) and uses a per-event bib sequence — test first: service test with fake repo — files: `internal/registrations/service.go`, `internal/adapters/postgresql/migrations/` (new sequence migration).
-- [ ] T7 Ownership checks: organizer routes verify the event belongs to the caller; participants verify their own resources — test first: service tests + router test after extracting route registration from `main.go` — files: `internal/events/service.go` (+ slices), `cmd/api/main.go`.
-- [ ] T8 `PUT /orders/{id}/status` and order mutations require admin (or the owning organizer) — test first: middleware/route test — files: `cmd/api/main.go`, `internal/orders/handler.go`.
+- [x] T7 Ownership checks: organizer routes verify the event belongs to the caller; participants verify their own resources — test first: service tests + router test after extracting route registration from `main.go` — files: `internal/events/service.go` (+ slices), `cmd/api/main.go`.
+- [x] T8 `PUT /orders/{id}/status` and order mutations require admin (or the owning organizer) — test first: middleware/route test — files: `cmd/api/main.go`, `internal/orders/handler.go`.
 - [ ] T9 Webhook trust: implement MercadoPago `x-signature` verification (`ts=v1` over `id:...;request-id:...;ts:...;`) and confirm the payment status with `GET /v1/payments/{id}` before marking `paid` — test first: `internal/orders/webhook_test.go` with an httptest MP server — files: `internal/mp/client.go`, `internal/orders/webhook.go`, `internal/orders/service.go`.
 - [ ] T10 Idempotency at storage level: unique partial index on `orders.mercado_pago_payment_id` and `organizer_payouts.order_id` unique; move the paid-marking + payout insert into one transaction (approved ADR-14) — test first: migration test on the integration suite — files: `internal/adapters/postgresql/migrations/`, `internal/orders/service.go`.
 - [ ] T11 Payout model: migrate `orders.amount`, `pricing_stages.price`, `awards.prize_amount` and `platform_config.commission_pct` to integer cents and drop the `float64` conversions (approve ADR-12 first) — test first: admin/orders rounding tests — files: migrations, `internal/orders`, `internal/admin`.
@@ -41,6 +41,7 @@ Decisions embedded here live as ADRs: authorization model choice (ownership chec
 - [ ] T17 CORS hardening kickoff from the phase-6 advisories: add `Vary: Origin` (done in phase 6) follow-ups; document origin lifecycle — files: `docs/ARCHITECTURE.md`.
 
 ## Log
+- 2026-11-06: T7 done (20cf962 + D5b commit): tokens carry organizer_id/participant_id claims; authz.CanManageEvent guards event core, field config, participant fields, awards/pricing/sponsors/locations/tags, distances, runner-kits and routes mutations; seed passes nil claims. Ownership unit tests in internal/authz; orders route contract tests. Gates enforced BEFORE writes; nil claims rejected. T8 done: orders PUT /payment|/status require admin (route-level, TestOrderMutationsRequireAdmin).
 - 2026-11-06: T1 ADR-14/ADR-12 accepted (docs commit 3c432f4). T2 store.ExecTx committed (760f996) with pool-free unit tests via TxStarter fake. T3 auth seam (Repository/TxRunner) + characterization + transactional registration committed (dbec4ff): failing user insert rolls the profile back and maps 23505 to ErrEmailTaken.
 
 ## Verification

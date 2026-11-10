@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "kinetix-api/internal/adapters/postgresql/sqlc"
+	"kinetix-api/internal/auth"
+	"kinetix-api/internal/authz"
 	"kinetix-api/internal/database/convert"
 	"kinetix-api/internal/routeparser"
 )
@@ -28,7 +30,13 @@ func NewService(repo *Repository, validator *validator.Validate) *Service {
 }
 
 // UploadFromGPX parses a GPX file and creates a route
-func (s *Service) UploadFromGPX(ctx context.Context, file io.Reader, req UploadRouteRequest) (RouteResponse, error) {
+func (s *Service) UploadFromGPX(ctx context.Context, caller *auth.Claims, file io.Reader, req UploadRouteRequest) (RouteResponse, error) {
+	if org, err := s.repo.EventOrganizer(ctx, req.EventID); err != nil {
+		return RouteResponse{}, err
+	} else if err := authz.CanManageEvent(caller, org); err != nil {
+		return RouteResponse{}, err
+	}
+
 	// Parse GPX
 	parsed, err := routeparser.ParseGPX(file)
 	if err != nil {
@@ -124,9 +132,19 @@ func (s *Service) ListByDistance(ctx context.Context, distanceID uuid.UUID) ([]R
 }
 
 // Delete removes a route
-func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
+func (s *Service) Delete(ctx context.Context, caller *auth.Claims, id uuid.UUID) error {
 	if id == uuid.Nil {
 		return fmt.Errorf("invalid route ID")
+	}
+
+	route, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if org, oerr := s.repo.EventOrganizer(ctx, route.EventID); oerr != nil {
+		return oerr
+	} else if aerr := authz.CanManageEvent(caller, org); aerr != nil {
+		return aerr
 	}
 
 	if err := s.repo.Delete(ctx, id); err != nil {

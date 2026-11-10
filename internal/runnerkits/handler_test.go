@@ -64,23 +64,39 @@ func TestCreateKitItemRequest_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "name too long",
-			req:     func() CreateRunnerKitItemRequest { r := validCreateKitItem(); r.Name = strings.Repeat("a", 101); return r }(),
+			name: "name too long",
+			req: func() CreateRunnerKitItemRequest {
+				r := validCreateKitItem()
+				r.Name = strings.Repeat("a", 101)
+				return r
+			}(),
 			wantErr: true,
 		},
 		{
-			name:    "name exactly 100",
-			req:     func() CreateRunnerKitItemRequest { r := validCreateKitItem(); r.Name = strings.Repeat("a", 100); return r }(),
+			name: "name exactly 100",
+			req: func() CreateRunnerKitItemRequest {
+				r := validCreateKitItem()
+				r.Name = strings.Repeat("a", 100)
+				return r
+			}(),
 			wantErr: false,
 		},
 		{
-			name:    "icon too long",
-			req:     func() CreateRunnerKitItemRequest { r := validCreateKitItem(); r.Icon = strings.Repeat("x", 51); return r }(),
+			name: "icon too long",
+			req: func() CreateRunnerKitItemRequest {
+				r := validCreateKitItem()
+				r.Icon = strings.Repeat("x", 51)
+				return r
+			}(),
 			wantErr: true,
 		},
 		{
-			name:    "icon exactly 50",
-			req:     func() CreateRunnerKitItemRequest { r := validCreateKitItem(); r.Icon = strings.Repeat("x", 50); return r }(),
+			name: "icon exactly 50",
+			req: func() CreateRunnerKitItemRequest {
+				r := validCreateKitItem()
+				r.Icon = strings.Repeat("x", 50)
+				return r
+			}(),
 			wantErr: false,
 		},
 	}

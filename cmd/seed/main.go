@@ -461,7 +461,7 @@ func (s *Seeder) createDistances(ctx context.Context, eventID uuid.UUID, distanc
 			Surface:        d.surface,
 		}
 
-		distance, err := distService.Create(ctx, req)
+		distance, err := distService.Create(ctx, nil, req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create distance %.1fkm: %w", d.km, err)
 		}
@@ -543,7 +543,7 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 				Capacity:       d.capacity,
 				Surface:        "asphalt",
 			}
-			dist, err := distService.Create(ctx, req)
+			dist, err := distService.Create(ctx, nil, req)
 			if err != nil {
 				log.Printf("    Warning: failed to create distance %.1fkm: %v", d.km, err)
 				continue
@@ -629,7 +629,7 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 				Capacity:       1500,
 				Surface:        "asphalt",
 			}
-			dist, err := distService.Create(ctx, req)
+			dist, err := distService.Create(ctx, nil, req)
 			if err != nil {
 				log.Printf("    Warning: failed to create distance for Neon Dash: %v", err)
 			} else {
@@ -710,7 +710,7 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 				Capacity:       800,
 				Surface:        "trail",
 			}
-			dist, err := distService.Create(ctx, req)
+			dist, err := distService.Create(ctx, nil, req)
 			if err != nil {
 				log.Printf("    Warning: failed to create distance for Summit Peak: %v", err)
 			} else {

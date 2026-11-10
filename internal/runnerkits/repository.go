@@ -23,9 +23,9 @@ func NewRepository(s *store.Store) *Repository {
 // Create inserts a new runner kit item
 func (r *Repository) Create(ctx context.Context, req CreateRunnerKitItemRequest) (db.RunnerKitItem, error) {
 	item, err := r.store.Queries.CreateRunnerKitItem(ctx, db.CreateRunnerKitItemParams{
-		EventID:     req.EventID,
-		Name:        req.Name,
-		Icon:        req.Icon,
+		EventID: req.EventID,
+		Name:    req.Name,
+		Icon:    req.Icon,
 	})
 	if err != nil {
 		return db.RunnerKitItem{}, fmt.Errorf("failed to create runner kit item: %w", err)
@@ -34,6 +34,24 @@ func (r *Repository) Create(ctx context.Context, req CreateRunnerKitItemRequest)
 }
 
 // GetByID retrieves a runner kit item by ID
+// EventOrganizer returns the organizer owning the event (ownership support).
+func (r *Repository) EventOrganizer(ctx context.Context, eventID uuid.UUID) (uuid.UUID, error) {
+	e, err := r.store.Queries.GetEvent(ctx, eventID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("event not found: %w", err)
+	}
+	return e.OrganizerID, nil
+}
+
+// EventOrganizerByItem resolves the organizer through the kit item's event.
+func (r *Repository) EventOrganizerByItem(ctx context.Context, itemID uuid.UUID) (uuid.UUID, error) {
+	item, err := r.GetByID(ctx, itemID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("runner kit item not found: %w", err)
+	}
+	return r.EventOrganizer(ctx, item.EventID)
+}
+
 func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (db.RunnerKitItem, error) {
 	item, err := r.store.Queries.GetRunnerKitItem(ctx, id)
 	if err != nil {
@@ -54,9 +72,9 @@ func (r *Repository) ListByEvent(ctx context.Context, eventID uuid.UUID) ([]db.R
 // Update updates an existing runner kit item
 func (r *Repository) Update(ctx context.Context, id uuid.UUID, req UpdateRunnerKitItemRequest) (db.RunnerKitItem, error) {
 	item, err := r.store.Queries.UpdateRunnerKitItem(ctx, db.UpdateRunnerKitItemParams{
-		ID:          id,
-		Name:        req.Name,
-		Icon:        req.Icon,
+		ID:   id,
+		Name: req.Name,
+		Icon: req.Icon,
 	})
 	if err != nil {
 		return db.RunnerKitItem{}, fmt.Errorf("failed to update runner kit item: %w", err)
@@ -78,10 +96,10 @@ func (r *Repository) Delete(ctx context.Context, id uuid.UUID) error {
 // toResponse converts a sqlc RunnerKitItem model to an API response
 func toResponse(item db.RunnerKitItem) RunnerKitItemResponse {
 	return RunnerKitItemResponse{
-		ID:          item.ID,
-		EventID:     item.EventID,
-		Name:        item.Name,
-		Icon:        item.Icon,
-		CreatedAt:   convert.PgTimeToTime(item.CreatedAt).Format("2006-01-02T15:04:05Z"),
+		ID:        item.ID,
+		EventID:   item.EventID,
+		Name:      item.Name,
+		Icon:      item.Icon,
+		CreatedAt: convert.PgTimeToTime(item.CreatedAt).Format("2006-01-02T15:04:05Z"),
 	}
 }

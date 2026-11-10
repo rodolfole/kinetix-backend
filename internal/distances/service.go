@@ -7,6 +7,9 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	db "kinetix-api/internal/adapters/postgresql/sqlc"
+
+	"kinetix-api/internal/auth"
+	"kinetix-api/internal/authz"
 )
 
 // Service handles business logic for distances
@@ -50,9 +53,15 @@ func (s *Service) GetTypeByID(ctx context.Context, id uuid.UUID) (db.DistanceTyp
 // ── CRUD Distances ─────────────────────────────────────────────────────────
 
 // Create creates a new distance
-func (s *Service) Create(ctx context.Context, req CreateDistanceRequest) (db.Distance, error) {
+func (s *Service) Create(ctx context.Context, caller *auth.Claims, req CreateDistanceRequest) (db.Distance, error) {
 	if err := s.validator.Struct(req); err != nil {
 		return db.Distance{}, fmt.Errorf("validation error: %w", err)
+	}
+
+	if org, err := s.repo.EventOrganizer(ctx, req.EventID); err != nil {
+		return db.Distance{}, err
+	} else if err := authz.CanManageEvent(caller, org); err != nil {
+		return db.Distance{}, err
 	}
 
 	// Verify distance type exists
@@ -97,13 +106,19 @@ func (s *Service) ListByEvent(ctx context.Context, eventID uuid.UUID) ([]db.Dist
 }
 
 // Update updates a distance
-func (s *Service) Update(ctx context.Context, id uuid.UUID, req UpdateDistanceRequest) (db.Distance, error) {
+func (s *Service) Update(ctx context.Context, caller *auth.Claims, id uuid.UUID, req UpdateDistanceRequest) (db.Distance, error) {
 	if id == uuid.Nil {
 		return db.Distance{}, fmt.Errorf("invalid distance ID")
 	}
 
 	if err := s.validator.Struct(req); err != nil {
 		return db.Distance{}, fmt.Errorf("validation error: %w", err)
+	}
+
+	if org, err := s.repo.EventOrganizerByDistance(ctx, id); err != nil {
+		return db.Distance{}, err
+	} else if err := authz.CanManageEvent(caller, org); err != nil {
+		return db.Distance{}, err
 	}
 
 	// Verify distance type exists
@@ -120,9 +135,15 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, req UpdateDistanceRe
 }
 
 // Delete removes a distance
-func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
+func (s *Service) Delete(ctx context.Context, caller *auth.Claims, id uuid.UUID) error {
 	if id == uuid.Nil {
 		return fmt.Errorf("invalid distance ID")
+	}
+
+	if org, err := s.repo.EventOrganizerByDistance(ctx, id); err != nil {
+		return err
+	} else if err := authz.CanManageEvent(caller, org); err != nil {
+		return err
 	}
 
 	if err := s.repo.Delete(ctx, id); err != nil {

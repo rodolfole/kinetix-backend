@@ -41,6 +41,28 @@ func (r *Repository) Create(ctx context.Context, eventID uuid.UUID, name string)
 }
 
 // Delete removes a tag by ID
+// EventOrganizer returns the organizer owning the event (ownership support).
+func (r *Repository) EventOrganizer(ctx context.Context, eventID uuid.UUID) (uuid.UUID, error) {
+	e, err := r.store.Queries.GetEvent(ctx, eventID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("event not found: %w", err)
+	}
+	return e.OrganizerID, nil
+}
+
+func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (db.EventTag, error) {
+	return r.store.Queries.GetEventTag(ctx, id)
+}
+
+// EventOrganizerByTag resolves the organizer through the tag's event.
+func (r *Repository) EventOrganizerByTag(ctx context.Context, tagID uuid.UUID) (uuid.UUID, error) {
+	tag, err := r.GetByID(ctx, tagID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("tag not found: %w", err)
+	}
+	return r.EventOrganizer(ctx, tag.EventID)
+}
+
 func (r *Repository) Delete(ctx context.Context, id uuid.UUID) error {
 	err := r.store.Queries.DeleteEventTag(ctx, id)
 	if err != nil {

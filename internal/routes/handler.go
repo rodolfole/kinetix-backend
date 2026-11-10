@@ -1,6 +1,7 @@
 package routes
 
 import (
+	kinemiddleware "kinetix-api/internal/middleware"
 	"net/http"
 
 	"kinetix-api/internal/json"
@@ -78,7 +79,8 @@ func (h *Handler) UploadGPX(w http.ResponseWriter, r *http.Request) {
 		Name:       name,
 	}
 
-	route, err := h.service.UploadFromGPX(r.Context(), file, req)
+	claims, _ := kinemiddleware.ClaimsFrom(r.Context())
+	route, err := h.service.UploadFromGPX(r.Context(), claims, file, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -158,7 +160,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), id); err != nil {
+	claims, _ := kinemiddleware.ClaimsFrom(r.Context())
+	if err := h.service.Delete(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}

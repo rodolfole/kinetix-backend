@@ -1,6 +1,7 @@
 package runnerkits
 
 import (
+	kinemiddleware "kinetix-api/internal/middleware"
 	"net/http"
 	"strings"
 
@@ -50,7 +51,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := h.service.Create(r.Context(), req)
+	claims, _ := kinemiddleware.ClaimsFrom(r.Context())
+	item, err := h.service.Create(r.Context(), claims, req)
 	if err != nil {
 		http.Error(w, `{"error":"`+sanitize(err.Error())+`"}`, http.StatusBadRequest)
 		return
@@ -116,7 +118,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := h.service.Update(r.Context(), id, req)
+	claims, _ := kinemiddleware.ClaimsFrom(r.Context())
+	item, err := h.service.Update(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -136,7 +139,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), id); err != nil {
+	claims, _ := kinemiddleware.ClaimsFrom(r.Context())
+	if err := h.service.Delete(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
