@@ -10,9 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"kinetix-api/internal/agecategories"
 	"kinetix-api/internal/admin"
-	"kinetix-api/internal/mp"
+	"kinetix-api/internal/agecategories"
 	"kinetix-api/internal/auth"
 	"kinetix-api/internal/config"
 	"kinetix-api/internal/database"
@@ -20,6 +19,7 @@ import (
 	"kinetix-api/internal/events"
 	"kinetix-api/internal/features/tags"
 	kinetix_middleware "kinetix-api/internal/middleware"
+	"kinetix-api/internal/mp"
 	"kinetix-api/internal/orders"
 	"kinetix-api/internal/organizers"
 	"kinetix-api/internal/participants"
@@ -127,7 +127,7 @@ func main() {
 	eventHandler := events.NewHandler(eventService, validator)
 	participantHandler := participants.NewHandler(participantService)
 	registrationHandler := registrations.NewHandler(registrationService)
-	orderHandler := orders.NewHandler(orderService, cfg.MercadoPago.WebhookSecret)
+	orderHandler := orders.NewHandler(orderService, cfg.MercadoPago.WebhookSecret, mpClient) // payment webhooks confirm with MP
 
 	// Setup router
 	r := chi.NewRouter()

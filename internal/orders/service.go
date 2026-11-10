@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strings"
+
+	"kinetix-api/internal/mp"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
@@ -113,15 +116,23 @@ func (s *Service) UpdateStatus(ctx context.Context, id uuid.UUID, status string)
 	return s.repo.UpdateStatus(ctx, id, status)
 }
 
-// ProcessWebhook processes a Mercado Pago payment notification. It is
-// idempotent: an order that is already paid is returned unchanged and no
-// second payout is recorded.
-func (s *Service) ProcessWebhook(ctx context.Context, paymentID string) (Order, error) {
+// ProcessWebhook processes a Mercado Pago payment notification confirmed
+// server-side via GetPayment (PLAN-16 T9). It is idempotent: an order that
+// is already paid is returned unchanged and no second payout is recorded.
+// A nil confirmation or a non-approved payment never marks the order paid.
+func (s *Service) ProcessWebhook(ctx context.Context, paymentID string, confirm *mp.PaymentConfirmation) (Order, error) {
+	if confirm == nil {
+		return Order{}, fmt.Errorf("payment verification required: missing confirmation of %s", paymentID)
+	}
+
 	order, err := s.repo.GetByMercadoPagoPaymentID(ctx, paymentID)
 	if err != nil {
 		return Order{}, fmt.Errorf("order not found: %w", err)
 	}
 	if order.Status == "paid" {
+		return order, nil
+	}
+	if !strings.EqualFold(confirm.Status, "approved") {
 		return order, nil
 	}
 

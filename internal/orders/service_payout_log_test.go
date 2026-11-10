@@ -13,7 +13,7 @@ func TestProcessWebhook_PayoutFailureIsReportedNotSwallowed(t *testing.T) {
 	var logged []error
 	svc := &Service{repo: repo, adminRepo: payouts, logPayoutError: func(o Order, err error) { logged = append(logged, err) }}
 
-	got, err := svc.ProcessWebhook(context.Background(), "mp-1")
+	got, err := svc.ProcessWebhook(context.Background(), "mp-1", approvedConfirmation())
 	if err != nil {
 		t.Fatalf("order is paid even if the payout fails; got error %v", err)
 	}

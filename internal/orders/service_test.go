@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
 	"github.com/jackc/pgx/v5/pgtype"
+	"kinetix-api/internal/mp"
 
 	db "kinetix-api/internal/adapters/postgresql/sqlc"
 )
@@ -77,7 +79,7 @@ func TestProcessWebhook_PayoutGoesToEventOrganizer(t *testing.T) {
 	payouts := &fakePayoutRepo{commissionPct: 10}
 	svc := &Service{repo: repo, adminRepo: payouts}
 
-	got, err := svc.ProcessWebhook(context.Background(), "mp-1")
+	got, err := svc.ProcessWebhook(context.Background(), "mp-1", approvedConfirmation())
 	if err != nil {
 		t.Fatalf("ProcessWebhook: %v", err)
 	}
@@ -103,7 +105,7 @@ func TestProcessWebhook_AlreadyPaidIsIdempotent(t *testing.T) {
 	payouts := &fakePayoutRepo{commissionPct: 10}
 	svc := &Service{repo: repo, adminRepo: payouts}
 
-	got, err := svc.ProcessWebhook(context.Background(), "mp-1")
+	got, err := svc.ProcessWebhook(context.Background(), "mp-1", approvedConfirmation())
 	if err != nil {
 		t.Fatalf("ProcessWebhook: %v", err)
 	}
@@ -125,10 +127,14 @@ func TestProcessWebhook_PayoutCentsAreRoundedNotTruncated(t *testing.T) {
 	payouts := &fakePayoutRepo{commissionPct: 0}
 	svc := &Service{repo: repo, adminRepo: payouts}
 
-	if _, err := svc.ProcessWebhook(context.Background(), "mp-1"); err != nil {
+	if _, err := svc.ProcessWebhook(context.Background(), "mp-1", approvedConfirmation()); err != nil {
 		t.Fatalf("ProcessWebhook: %v", err)
 	}
 	if len(payouts.created) != 1 || payouts.created[0].AmountCents != 1999 {
 		t.Fatalf("payouts = %+v, want one payout of 1999 cents", payouts.created)
 	}
+}
+
+func approvedConfirmation() *mp.PaymentConfirmation {
+	return &mp.PaymentConfirmation{ID: 123, Status: "approved"}
 }

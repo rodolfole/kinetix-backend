@@ -42,7 +42,7 @@ func TestList_QueryIDs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &listRecorderRepo{}
-			h := NewHandler(&Service{repo: repo}, "secret")
+			h := NewHandler(&Service{repo: repo}, "secret", nil)
 			r := chi.NewRouter()
 			h.Routes(r)
 

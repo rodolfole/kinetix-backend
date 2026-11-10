@@ -132,7 +132,7 @@ func mpPayload(paymentID string) []byte {
 
 func TestPaymentWebhook_MissingSignatureReturns401(t *testing.T) {
 	svc := NewService(nil, nil, nil)
-	h := NewHandler(svc, "mp-secret")
+	h := NewHandler(svc, "mp-secret", nil)
 
 	body := mpPayload("pay-123")
 	req := httptest.NewRequest(http.MethodPost, "/orders/webhook", bytes.NewReader(body))
@@ -148,7 +148,7 @@ func TestPaymentWebhook_MissingSignatureReturns401(t *testing.T) {
 
 func TestPaymentWebhook_WrongSignatureReturns403(t *testing.T) {
 	svc := NewService(nil, nil, nil)
-	h := NewHandler(svc, "mp-secret")
+	h := NewHandler(svc, "mp-secret", nil)
 
 	body := mpPayload("pay-123")
 	req := httptest.NewRequest(http.MethodPost, "/orders/webhook", bytes.NewReader(body))
@@ -166,7 +166,7 @@ func TestPaymentWebhook_WrongSignatureReturns403(t *testing.T) {
 func TestPaymentWebhook_ValidSignatureEmptyPaymentIDReturns400(t *testing.T) {
 	secret := "mp-access-token"
 	svc := NewService(nil, nil, nil)
-	h := NewHandler(svc, secret)
+	h := NewHandler(svc, secret, nil)
 
 	// Send payload with empty data.id
 	body := []byte(`{"action":"payment.created","data":{"id":""},"type":"payment"}`)
@@ -185,7 +185,7 @@ func TestPaymentWebhook_ValidSignatureEmptyPaymentIDReturns400(t *testing.T) {
 func TestPaymentWebhook_ValidSignatureInvalidJSONReturns400(t *testing.T) {
 	secret := "mp-access-token"
 	svc := NewService(nil, nil, nil)
-	h := NewHandler(svc, secret)
+	h := NewHandler(svc, secret, nil)
 
 	body := []byte(`not json`)
 	req := httptest.NewRequest(http.MethodPost, "/orders/webhook", bytes.NewReader(body))
@@ -201,7 +201,7 @@ func TestPaymentWebhook_ValidSignatureInvalidJSONReturns400(t *testing.T) {
 }
 func TestPaymentWebhook_EmptySecretReturns503(t *testing.T) {
 	// nil service: reaching ProcessWebhook would panic, proving the request is rejected first.
-	h := NewHandler(nil, "")
+	h := NewHandler(nil, "", nil)
 
 	body := mpPayload("pay-123")
 	req := httptest.NewRequest(http.MethodPost, "/orders/webhook", bytes.NewReader(body))

@@ -1,6 +1,9 @@
 package orders
 
 import (
+	"fmt"
+	"strings"
+
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,19 +15,50 @@ import (
 	"github.com/google/uuid"
 
 	kinemiddleware "kinetix-api/internal/middleware"
+
+	"kinetix-api/internal/mp"
 )
+
+// PaymentVerifier confirms payment status with the MercadoPago API before
+// the webhook trusts the notification (PLAN-16 T9).
+type PaymentVerifier interface {
+	GetPayment(paymentID string) (*mp.PaymentConfirmation, error)
+}
 
 // Handler handles HTTP requests for orders
 type Handler struct {
 	service       *Service
 	webhookSecret string
+	verifier      PaymentVerifier
 }
 
 // NewHandler creates a new orders handler
-func NewHandler(service *Service, webhookSecret string) *Handler {
+func NewHandler(service *Service, webhookSecret string, verifier PaymentVerifier) *Handler {
 	return &Handler{
 		service:       service,
 		webhookSecret: webhookSecret,
+		verifier:      verifier,
+	}
+}
+
+// verifyPayment asks the PaymentVerifier for the payment status. It writes
+// the error response itself and returns the confirmación only on success.
+func (h *Handler) verifyPayment(w http.ResponseWriter, r *http.Request, paymentID string) (*mp.PaymentConfirmation, error) {
+	if h.verifier == nil {
+		jsonlib.WriteError(w, http.StatusServiceUnavailable, "payment verifier not configured")
+		return nil, fmt.Errorf("payment verifier not configured")
+	}
+	if confirm, err := h.verifier.GetPayment(paymentID); err != nil {
+		jsonlib.WriteError(w, http.StatusServiceUnavailable, "payment verification failed")
+		return nil, err
+	} else if !strings.EqualFold(confirm.Status, "approved") {
+		jsonlib.Write(w, http.StatusOK, map[string]any{
+			"message":        "payment not approved; the order stays unchanged",
+			"payment_status": confirm.Status,
+		})
+		return nil, nil
+	} else {
+		return confirm, nil
 	}
 }
 
@@ -208,7 +242,13 @@ func (h *Handler) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	order, err := h.service.ProcessWebhook(r.Context(), webhook.Data.ID)
+	// Confirm the payment with MercadoPago: the notification alone is untrusted.
+	confirm, vErr := h.verifyPayment(w, r, webhook.Data.ID)
+	if vErr != nil {
+		return
+	}
+
+	order, err := h.service.ProcessWebhook(r.Context(), webhook.Data.ID, confirm)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
