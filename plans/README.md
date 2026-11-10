@@ -79,3 +79,4 @@ Check a task box only when the code shows it is done.
 | 13 | [Orders](PLAN-13-orders.md) | In progress | [SPEC-orders](../docs/specs/SPEC-orders.md) | ADR-7, ADR-12 |
 | 14 | [Platform payments](PLAN-14-platform-payments.md) | Done | [SPEC-platform-payments](../docs/specs/SPEC-platform-payments.md) | ADR-7, ADR-8, ADR-12 |
 | 15 | [Strict TDD and bug fixes](PLAN-15-strict-tdd-and-bug-fixes.md) | Approved | auth, orders, platform-payments, events | ADR-4, ADR-5, ADR-7, ADR-11, ADR-12, ADR-14 |
+| 16 | [Platform hardening and completion](PLAN-16-platform-hardening.md) | Approved | platform-payments, orders, events | ADR-6, ADR-7, ADR-12, ADR-14 |
