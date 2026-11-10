@@ -1,7 +1,8 @@
-Organizer
-    contact@kinetix.com
-    seed1234
+# Local demo accounts
 
-Participant
-    pedro.martinez@example.com
-    seed1234
+Created by `go run ./cmd/seed` against the docker-compose database.
+
+- Organizer: `contact@kinetix.com`
+- Participant: `pedro.martinez@example.com`
+
+Passwords are set by `cmd/seed` (see `cmd/seed/main.go`). Do not commit real or production credentials in this file.
