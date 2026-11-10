@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -42,6 +42,10 @@ import (
 // @in header
 // @name Authorization
 func main() {
+	// Structured JSON logging (PLAN-16 T14): leveled, machine-readable.
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	slog.Debug("logging configured")
+
 	// Load configuration
 	cfg := config.Load()
 
@@ -58,7 +62,8 @@ func main() {
 		SSLMode:  cfg.Database.SSLMode,
 	})
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		slog.Error("database connection failed", slog.Any("err", err))
+		os.Exit(1)
 	}
 	defer database.ClosePool(pool)
 
@@ -135,7 +140,15 @@ func main() {
 	// Global middleware
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
-	r.Use(chimiddleware.Logger)
+	kinetix_middleware.RequestIDResolver = func(r *http.Request) string {
+		if v := r.Context().Value(chimiddleware.RequestIDKey); v != nil {
+			if id, ok := v.(string); ok {
+				return id
+			}
+		}
+		return ""
+	}
+	r.Use(kinetix_middleware.RequestLogger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.Timeout(60 * time.Second))
 	r.Use(kinetix_middleware.CORS(cfg.Server.CORSAllowedOrigins))
@@ -281,7 +294,7 @@ func main() {
 
 	// Start server
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
-	log.Printf("Starting server on %s", addr)
+	slog.Info("starting server", slog.String("addr", addr))
 
 	srv := &http.Server{
 		Addr:    addr,
@@ -291,7 +304,8 @@ func main() {
 	// Graceful shutdown
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
+			slog.Error("server failed to start", slog.Any("err", err))
+			os.Exit(1)
 		}
 	}()
 
@@ -300,16 +314,17 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	slog.Info("shutting down server")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		slog.Error("forced shutdown", slog.Any("err", err))
+		os.Exit(1)
 	}
 
-	log.Println("Server exited properly")
+	slog.Info("server exited cleanly")
 }
 
 // healthCheck handles GET /health
