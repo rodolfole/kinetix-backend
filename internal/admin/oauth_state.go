@@ -22,13 +22,13 @@ func SignOAuthState(secret string, organizerID uuid.UUID) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(payload))
 	sig := mac.Sum(nil)
-	return base64.RawURLEncoding.EncodeToString(sig) + "x" + base64.RawURLEncoding.EncodeToString([]byte(payload))
+	return base64.RawURLEncoding.EncodeToString(sig) + "." + base64.RawURLEncoding.EncodeToString([]byte(payload))
 }
 
 // VerifyOAuthState accepts a state produced by SignOAuthState and returns
 // the organizer it binds to. It is constant-time on the MAC comparison.
 func VerifyOAuthState(secret, state string) (uuid.UUID, error) {
-	parts := strings.SplitN(state, "x", 2)
+	parts := strings.SplitN(state, ".", 2)
 	if len(parts) != 2 {
 		return uuid.Nil, ErrInvalidState
 	}
