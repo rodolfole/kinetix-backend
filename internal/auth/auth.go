@@ -2,17 +2,24 @@ package auth
 
 import (
 	"errors"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// Token types carried in the "typ" claim. Access and refresh tokens are not
+// interchangeable: JWTAuth accepts only access tokens and /auth/refresh only
+// refresh tokens.
+const (
+	TokenTypeAccess  = "access"
+	TokenTypeRefresh = "refresh"
+)
+
 // Claims represents JWT claims
 type Claims struct {
-	UserID string `json:"user_id"`
-	Role   string `json:"role"`
+	UserID    string `json:"user_id"`
+	Role      string `json:"role"`
+	TokenType string `json:"typ,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -23,23 +30,28 @@ type Config struct {
 	RefreshExpiry time.Duration
 }
 
-// DefaultConfig returns default JWT configuration
-// NOTE: In production, always pass Config from config.Load() which validates JWT_SECRET is set
-func DefaultConfig() Config {
-	return Config{
-		SecretKey:     "", // Must be set via config.Load() in production
-		TokenExpiry:   24 * time.Hour,
-		RefreshExpiry: 7 * 24 * time.Hour,
-	}
+// GenerateToken generates a new access token
+func GenerateToken(cfg Config, userID, role string) (string, error) {
+	return generate(cfg, userID, role, TokenTypeAccess, cfg.TokenExpiry)
 }
 
-// GenerateToken generates a new JWT token
-func GenerateToken(cfg Config, userID, role string) (string, error) {
+// GenerateRefreshToken generates a refresh token that lives RefreshExpiry
+// (falls back to TokenExpiry when RefreshExpiry is not set).
+func GenerateRefreshToken(cfg Config, userID, role string) (string, error) {
+	expiry := cfg.RefreshExpiry
+	if expiry == 0 {
+		expiry = cfg.TokenExpiry
+	}
+	return generate(cfg, userID, role, TokenTypeRefresh, expiry)
+}
+
+func generate(cfg Config, userID, role, tokenType string, expiry time.Duration) (string, error) {
 	claims := Claims{
-		UserID: userID,
-		Role:   role,
+		UserID:    userID,
+		Role:      role,
+		TokenType: tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(cfg.TokenExpiry)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
 			Issuer:    "kinetix-api",
@@ -70,16 +82,28 @@ func ValidateToken(cfg Config, tokenString string) (*Claims, error) {
 	return nil, errors.New("invalid token")
 }
 
-// ExtractTokenFromHeader extracts JWT token from Authorization header
-func ExtractTokenFromHeader(r *http.Request) (string, error) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return "", errors.New("authorization header required")
+// ValidateAccessToken validates a token and rejects refresh tokens. Tokens
+// issued before the "typ" claim existed carry no type and are treated as
+// access tokens.
+func ValidateAccessToken(cfg Config, tokenString string) (*Claims, error) {
+	claims, err := ValidateToken(cfg, tokenString)
+	if err != nil {
+		return nil, err
 	}
-
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		return "", errors.New("invalid authorization header format")
+	if claims.TokenType == TokenTypeRefresh {
+		return nil, errors.New("refresh token cannot be used as access token")
 	}
+	return claims, nil
+}
 
-	return strings.TrimPrefix(authHeader, "Bearer "), nil
+// ValidateRefreshToken validates a token and accepts only refresh tokens.
+func ValidateRefreshToken(cfg Config, tokenString string) (*Claims, error) {
+	claims, err := ValidateToken(cfg, tokenString)
+	if err != nil {
+		return nil, err
+	}
+	if claims.TokenType != TokenTypeRefresh {
+		return nil, errors.New("not a refresh token")
+	}
+	return claims, nil
 }

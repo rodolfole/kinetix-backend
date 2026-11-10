@@ -214,36 +214,5 @@ func TestRegisterOrganizerRequest_Validate(t *testing.T) {
 	}
 }
 
-func TestExtractTokenFromHeader_BearerVariations(t *testing.T) {
-	tests := []struct {
-		name      string
-		header    string
-		wantToken string
-		wantErr   bool
-	}{
-		{name: "lowercase bearer rejected (case-sensitive)", header: "bearer abc", wantErr: true},
-		{name: "double space returns second token", header: "Bearer  abc", wantToken: " abc"},
-		{name: "trailing space is preserved", header: "Bearer abc ", wantToken: "abc "},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := newAuthRequest(tt.header)
-			tok, err := ExtractTokenFromHeader(r)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error, got token %q", tok)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if tok != tt.wantToken {
-				t.Errorf("want %q, got %q", tt.wantToken, tok)
-			}
-		})
-	}
-}
-
 // keep strings import used to avoid unused import error
 var _ = strings.TrimSpace

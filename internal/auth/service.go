@@ -80,7 +80,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (TokenResponse, U
 		return TokenResponse{}, UserClaims{}, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, err := GenerateToken(s.cfg, user.ID.String(), user.Role)
+	refreshToken, err := GenerateRefreshToken(s.cfg, user.ID.String(), user.Role)
 	if err != nil {
 		return TokenResponse{}, UserClaims{}, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
@@ -148,7 +148,7 @@ func (s *Service) RegisterOrganizer(ctx context.Context, req RegisterOrganizerRe
 		return RegisterResponse{}, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, err := GenerateToken(s.cfg, user.ID.String(), user.Role)
+	refreshToken, err := GenerateRefreshToken(s.cfg, user.ID.String(), user.Role)
 	if err != nil {
 		return RegisterResponse{}, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
@@ -210,7 +210,7 @@ func (s *Service) RegisterParticipant(ctx context.Context, req RegisterParticipa
 		return RegisterResponse{}, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, err := GenerateToken(s.cfg, user.ID.String(), user.Role)
+	refreshToken, err := GenerateRefreshToken(s.cfg, user.ID.String(), user.Role)
 	if err != nil {
 		return RegisterResponse{}, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
@@ -230,7 +230,7 @@ func (s *Service) RegisterParticipant(ctx context.Context, req RegisterParticipa
 
 // RefreshToken refreshes an access token
 func (s *Service) RefreshToken(ctx context.Context, refreshToken string) (TokenResponse, UserClaims, error) {
-	claims, err := ValidateToken(s.cfg, refreshToken)
+	claims, err := ValidateRefreshToken(s.cfg, refreshToken)
 	if err != nil {
 		return TokenResponse{}, UserClaims{}, ErrInvalidCredentials
 	}
@@ -254,7 +254,7 @@ func (s *Service) RefreshToken(ctx context.Context, refreshToken string) (TokenR
 		return TokenResponse{}, UserClaims{}, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	newRefreshToken, err := GenerateToken(s.cfg, user.ID.String(), user.Role)
+	newRefreshToken, err := GenerateRefreshToken(s.cfg, user.ID.String(), user.Role)
 	if err != nil {
 		return TokenResponse{}, UserClaims{}, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
