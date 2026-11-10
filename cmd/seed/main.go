@@ -224,7 +224,7 @@ func (s *Seeder) Run() error {
 	// Create registrations with bib numbers
 	log.Println("Creating registrations...")
 	regRepo := registrations.NewRepository(s.store)
-	regService := registrations.NewService(regRepo, s.store, s.validator)
+	regService := registrations.NewService(regRepo, regRepo, s.validator)
 
 	// Check which participants already have a registration for this event
 	type participantReg struct {

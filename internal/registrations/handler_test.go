@@ -116,40 +116,64 @@ func TestCreateParticipantData_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{name: "missing first_name", req: func() CreateParticipantData {
-			r := validParticipant(); r.FirstName = ""; return r
+			r := validParticipant()
+			r.FirstName = ""
+			return r
 		}(), wantErr: true},
 		{name: "missing last_name", req: func() CreateParticipantData {
-			r := validParticipant(); r.LastName = ""; return r
+			r := validParticipant()
+			r.LastName = ""
+			return r
 		}(), wantErr: true},
 		{name: "missing gender", req: func() CreateParticipantData {
-			r := validParticipant(); r.Gender = ""; return r
+			r := validParticipant()
+			r.Gender = ""
+			return r
 		}(), wantErr: true},
 		{name: "missing email", req: func() CreateParticipantData {
-			r := validParticipant(); r.Email = ""; return r
+			r := validParticipant()
+			r.Email = ""
+			return r
 		}(), wantErr: true},
 		{name: "bad email", req: func() CreateParticipantData {
-			r := validParticipant(); r.Email = "no-at-sign"; return r
+			r := validParticipant()
+			r.Email = "no-at-sign"
+			return r
 		}(), wantErr: true},
 		{name: "missing phone", req: func() CreateParticipantData {
-			r := validParticipant(); r.Phone = ""; return r
+			r := validParticipant()
+			r.Phone = ""
+			return r
 		}(), wantErr: true},
 		{name: "phone too short", req: func() CreateParticipantData {
-			r := validParticipant(); r.Phone = "12345"; return r
+			r := validParticipant()
+			r.Phone = "12345"
+			return r
 		}(), wantErr: true},
 		{name: "missing country", req: func() CreateParticipantData {
-			r := validParticipant(); r.Country = ""; return r
+			r := validParticipant()
+			r.Country = ""
+			return r
 		}(), wantErr: true},
 		{name: "country wrong length", req: func() CreateParticipantData {
-			r := validParticipant(); r.Country = "MEX"; return r
+			r := validParticipant()
+			r.Country = "MEX"
+			return r
 		}(), wantErr: true},
 		{name: "missing address", req: func() CreateParticipantData {
-			r := validParticipant(); r.Address = ""; return r
+			r := validParticipant()
+			r.Address = ""
+			return r
 		}(), wantErr: true},
 		{name: "bad size", req: func() CreateParticipantData {
-			r := validParticipant(); r.Size = strPtr("XXXL"); return r
+			r := validParticipant()
+			r.Size = strPtr("XXXL")
+			return r
 		}(), wantErr: true},
 		{name: "good size XL", req: func() CreateParticipantData {
-			r := validParticipant(); r.Size = strPtr("XL"); return r
+			r := validParticipant()
+			r.Size = strPtr("XL")
+			return r
 		}(), wantErr: false},
 	}
 
@@ -235,7 +259,7 @@ func TestCreateWithParticipantRequest_Validate(t *testing.T) {
 		{
 			name: "valid with new participant",
 			req: CreateWithParticipantRequest{
-				EventID: uuid.New(),
+				EventID:     uuid.New(),
 				Participant: validParticipant(),
 				Registration: CreateWithParticipantRegistration{
 					DistanceID: uuid.New(),

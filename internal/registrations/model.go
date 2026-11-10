@@ -57,32 +57,32 @@ type CreateRegistrationRequest struct {
 // CreateWithParticipantRequest represents the request body for creating a participant and registration together
 // If ParticipantID is provided, the existing participant is used and team/size are updated
 type CreateWithParticipantRequest struct {
-	EventID       uuid.UUID                      `json:"event_id" validate:"required"`
-	ParticipantID *uuid.UUID                    `json:"participant_id,omitempty"` // When set, use existing participant
-	Participant   CreateParticipantData         `json:"participant,omitempty"`     // Required only if ParticipantID not set
+	EventID       uuid.UUID                         `json:"event_id" validate:"required"`
+	ParticipantID *uuid.UUID                        `json:"participant_id,omitempty"` // When set, use existing participant
+	Participant   CreateParticipantData             `json:"participant,omitempty"`    // Required only if ParticipantID not set
 	Registration  CreateWithParticipantRegistration `json:"registration" validate:"required"`
 }
 
 // CreateParticipantData represents the participant data in a with-participant request
 type CreateParticipantData struct {
-	FirstName             string    `json:"first_name" validate:"required,max=100"`
-	LastName              string    `json:"last_name" validate:"required,max=100"`
-	SecondLastName        *string   `json:"second_last_name" validate:"omitempty,max=100"`
-	Gender                string    `json:"gender" validate:"required,max=20"`
-	BirthDate             time.Time `json:"birth_date" validate:"required"`
-	Email                 string    `json:"email" validate:"required,email"`
-	Phone                 string    `json:"phone" validate:"required,min=10,max=20"`
-	Country               string    `json:"country" validate:"required,len=2"`
-	Municipality          *string   `json:"municipality" validate:"omitempty,max=100"`
-	State                 *string   `json:"state" validate:"omitempty,max=100"`
-	ZipCode               *string   `json:"zip_code" validate:"omitempty,max=10"`
-	Team                  *string   `json:"team" validate:"omitempty,max=255"`
-	Size                  *string   `json:"size" validate:"omitempty,oneof=XS S M L XL XXL"`
-	EmergencyContactName  *string   `json:"emergency_contact_name" validate:"omitempty,max=255"`
-	EmergencyContactPhone *string   `json:"emergency_contact_phone" validate:"omitempty,max=20"`
-	MedicalInfo           *string   `json:"medical_info" validate:"omitempty,max=1000"`
+	FirstName             string     `json:"first_name" validate:"required,max=100"`
+	LastName              string     `json:"last_name" validate:"required,max=100"`
+	SecondLastName        *string    `json:"second_last_name" validate:"omitempty,max=100"`
+	Gender                string     `json:"gender" validate:"required,max=20"`
+	BirthDate             time.Time  `json:"birth_date" validate:"required"`
+	Email                 string     `json:"email" validate:"required,email"`
+	Phone                 string     `json:"phone" validate:"required,min=10,max=20"`
+	Country               string     `json:"country" validate:"required,len=2"`
+	Municipality          *string    `json:"municipality" validate:"omitempty,max=100"`
+	State                 *string    `json:"state" validate:"omitempty,max=100"`
+	ZipCode               *string    `json:"zip_code" validate:"omitempty,max=10"`
+	Team                  *string    `json:"team" validate:"omitempty,max=255"`
+	Size                  *string    `json:"size" validate:"omitempty,oneof=XS S M L XL XXL"`
+	EmergencyContactName  *string    `json:"emergency_contact_name" validate:"omitempty,max=255"`
+	EmergencyContactPhone *string    `json:"emergency_contact_phone" validate:"omitempty,max=20"`
+	MedicalInfo           *string    `json:"medical_info" validate:"omitempty,max=1000"`
 	WaiverSignedAt        *time.Time `json:"waiver_signed_at"`
-	Address               string    `json:"address" validate:"required"`
+	Address               string     `json:"address" validate:"required"`
 }
 
 // CreateWithParticipantRegistration represents the registration data in a with-participant request
