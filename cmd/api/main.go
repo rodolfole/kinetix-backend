@@ -188,53 +188,58 @@ func main() {
 			r.Put("/organizers/{id}", organizerHandler.UpdateOrganizer)
 			r.Delete("/organizers/{id}", organizerHandler.DeleteOrganizer)
 
-			// Distances management (protected)
-			r.Route("/distances", func(r chi.Router) {
-				distanceHandler.Routes(r)
-			})
+			// Event management: organizers and admins only (participants get 403).
+			r.Group(func(r chi.Router) {
+				r.Use(kinetix_middleware.RequireAnyRole("organizer", "admin"))
 
-			// Event management (protected) — individual paths, no subrouter at /events
-			r.Post("/events", eventHandler.CreateEvent)
-			r.Put("/events/{id}", eventHandler.UpdateEvent)
-			r.Patch("/events/{id}/status", eventHandler.UpdateEventStatus)
-			r.Delete("/events/{id}", eventHandler.DeleteEvent)
+				// Distances management (protected)
+				r.Route("/distances", func(r chi.Router) {
+					distanceHandler.Routes(r)
+				})
 
-			r.Post("/events/awards", eventHandler.CreateAward)
-			r.Get("/events/awards/{id}", eventHandler.GetAward)
-			r.Put("/events/awards/{id}", eventHandler.UpdateAward)
-			r.Delete("/events/awards/{id}", eventHandler.DeleteAward)
+				// Event management (protected) — individual paths, no subrouter at /events
+				r.Post("/events", eventHandler.CreateEvent)
+				r.Put("/events/{id}", eventHandler.UpdateEvent)
+				r.Patch("/events/{id}/status", eventHandler.UpdateEventStatus)
+				r.Delete("/events/{id}", eventHandler.DeleteEvent)
 
-			r.Post("/events/pricing", eventHandler.CreatePricingStage)
-			r.Get("/events/pricing/{id}", eventHandler.GetPricingStage)
-			r.Put("/events/pricing/{id}", eventHandler.UpdatePricingStage)
-			r.Delete("/events/pricing/{id}", eventHandler.DeletePricingStage)
+				r.Post("/events/awards", eventHandler.CreateAward)
+				r.Get("/events/awards/{id}", eventHandler.GetAward)
+				r.Put("/events/awards/{id}", eventHandler.UpdateAward)
+				r.Delete("/events/awards/{id}", eventHandler.DeleteAward)
 
-			r.Post("/events/sponsors", eventHandler.CreateSponsor)
-			r.Get("/events/sponsors/{id}", eventHandler.GetSponsor)
-			r.Put("/events/sponsors/{id}", eventHandler.UpdateSponsor)
-			r.Delete("/events/sponsors/{id}", eventHandler.DeleteSponsor)
+				r.Post("/events/pricing", eventHandler.CreatePricingStage)
+				r.Get("/events/pricing/{id}", eventHandler.GetPricingStage)
+				r.Put("/events/pricing/{id}", eventHandler.UpdatePricingStage)
+				r.Delete("/events/pricing/{id}", eventHandler.DeletePricingStage)
 
-			r.Post("/events/locations", eventHandler.CreateRegistrationLocation)
-			r.Get("/events/locations/{id}", eventHandler.GetRegistrationLocation)
-			r.Put("/events/locations/{id}", eventHandler.UpdateRegistrationLocation)
-			r.Delete("/events/locations/{id}", eventHandler.DeleteRegistrationLocation)
+				r.Post("/events/sponsors", eventHandler.CreateSponsor)
+				r.Get("/events/sponsors/{id}", eventHandler.GetSponsor)
+				r.Put("/events/sponsors/{id}", eventHandler.UpdateSponsor)
+				r.Delete("/events/sponsors/{id}", eventHandler.DeleteSponsor)
 
-			// Field config (protected) — togglable optional sections per event
-			r.Get("/events/{id}/field-config", eventHandler.GetFieldConfig)
-			r.Put("/events/{id}/field-config", eventHandler.UpdateFieldConfig)
+				r.Post("/events/locations", eventHandler.CreateRegistrationLocation)
+				r.Get("/events/locations/{id}", eventHandler.GetRegistrationLocation)
+				r.Put("/events/locations/{id}", eventHandler.UpdateRegistrationLocation)
+				r.Delete("/events/locations/{id}", eventHandler.DeleteRegistrationLocation)
 
-			// Tags management (protected)
-			r.Post("/events/tags", tagHandler.Create)
-			r.Delete("/events/tags/{id}", tagHandler.Delete)
+				// Field config (protected) — togglable optional sections per event
+				// GET stays public (registered above); a second GET here would shadow it.
+				r.Put("/events/{id}/field-config", eventHandler.UpdateFieldConfig)
 
-			// Runner kits management (protected)
-			r.Route("/runner-kits", func(r chi.Router) {
-				runnerKitHandler.Routes(r)
-			})
+				// Tags management (protected)
+				r.Post("/events/tags", tagHandler.Create)
+				r.Delete("/events/tags/{id}", tagHandler.Delete)
 
-			// Routes management (protected)
-			r.Route("/routes", func(r chi.Router) {
-				routesHandler.Routes(r)
+				// Runner kits management (protected)
+				r.Route("/runner-kits", func(r chi.Router) {
+					runnerKitHandler.Routes(r)
+				})
+
+				// Routes management (protected)
+				r.Route("/routes", func(r chi.Router) {
+					routesHandler.Routes(r)
+				})
 			})
 
 			// Participants (protected)
