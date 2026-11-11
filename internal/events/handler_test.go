@@ -144,7 +144,7 @@ func TestCreateAwardRequest_Validate(t *testing.T) {
 		AgeCategoryID: uuid.New(),
 		Gender:        "male",
 		Place:         1,
-		PrizeCents:   1000,
+		PrizeCents:    1000,
 	}
 
 	tests := []struct {
@@ -185,7 +185,7 @@ func TestUpdateAwardRequest_Validate(t *testing.T) {
 		AgeCategoryID: uuid.New(),
 		Gender:        "female",
 		Place:         2,
-		PrizeCents:   500,
+		PrizeCents:    500,
 	}
 
 	tests := []struct {

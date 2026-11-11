@@ -2,11 +2,12 @@ package participants
 
 import (
 	"encoding/json"
+	"fmt"
+	"kinetix-api/internal/httpx"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 // Handler handles HTTP requests for participants
@@ -34,13 +35,13 @@ func (h *Handler) Routes(r chi.Router) {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateParticipantRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpx.WriteError(w, r, fmt.Errorf("invalid input: %w", httpx.ErrInvalidInput))
 		return
 	}
 
 	participant, err := h.service.Create(r.Context(), req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -61,7 +62,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	participants, total, err := h.service.List(r.Context(), limit, offset)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -74,15 +75,14 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 // GetByID handles GET /participants/{id}
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	participant, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		httpx.WriteError(w, r, fmt.Errorf("not found: %w", httpx.ErrNotFound))
 		return
 	}
 
@@ -94,21 +94,20 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 // Update handles PUT /participants/{id}
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	var req UpdateParticipantRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpx.WriteError(w, r, fmt.Errorf("invalid input: %w", httpx.ErrInvalidInput))
 		return
 	}
 
 	participant, err := h.service.Update(r.Context(), id, req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -120,14 +119,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete handles DELETE /participants/{id}
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	if err := h.service.Delete(r.Context(), id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 

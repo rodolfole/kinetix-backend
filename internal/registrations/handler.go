@@ -2,6 +2,8 @@ package registrations
 
 import (
 	"encoding/json"
+	"fmt"
+	"kinetix-api/internal/httpx"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -34,13 +36,13 @@ func (h *Handler) Routes(r chi.Router) {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateRegistrationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpx.WriteError(w, r, fmt.Errorf("invalid input: %w", httpx.ErrInvalidInput))
 		return
 	}
 
 	registration, err := h.service.Create(r.Context(), req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -54,13 +56,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateWithParticipant(w http.ResponseWriter, r *http.Request) {
 	var req CreateWithParticipantRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpx.WriteError(w, r, fmt.Errorf("invalid input: %w", httpx.ErrInvalidInput))
 		return
 	}
 
 	registration, err := h.service.CreateWithParticipant(r.Context(), req.EventID, req.Participant, req.Registration, req.ParticipantID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -80,13 +82,13 @@ func (h *Handler) ListByEvent(w http.ResponseWriter, r *http.Request) {
 
 	eventID, err := uuid.Parse(eventIDStr)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpx.WriteError(w, r, fmt.Errorf("invalid input: %w", httpx.ErrInvalidInput))
 		return
 	}
 
 	registrations, err := h.service.ListByEvent(r.Context(), eventID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -98,15 +100,14 @@ func (h *Handler) ListByEvent(w http.ResponseWriter, r *http.Request) {
 
 // ListByParticipant handles GET /registrations/participant/{participant_id}
 func (h *Handler) ListByParticipant(w http.ResponseWriter, r *http.Request) {
-	participantID, err := uuid.Parse(chi.URLParam(r, "participant_id"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	participantID, ok := httpx.UUIDParam(w, r, "participant_id")
+	if !ok {
 		return
 	}
 
 	registrations, err := h.service.ListByParticipant(r.Context(), participantID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -118,15 +119,14 @@ func (h *Handler) ListByParticipant(w http.ResponseWriter, r *http.Request) {
 
 // GetByID handles GET /registrations/{id}
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	registration, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		httpx.WriteError(w, r, fmt.Errorf("not found: %w", httpx.ErrNotFound))
 		return
 	}
 
@@ -138,14 +138,13 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 // Delete handles DELETE /registrations/{id}
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	if err := h.service.Delete(r.Context(), id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
