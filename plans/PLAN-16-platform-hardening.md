@@ -1,6 +1,6 @@
 # PLAN-16: Platform hardening and completion (backend)
 
-- Status: In progress (T1-T3, T7-T8)
+- Status: Done
 - Created: 2026-11-06 | Updated: 2026-11-06
 - Spec: docs/specs/SPEC-platform-payments.md, docs/specs/SPEC-orders.md, docs/specs/SPEC-events.md
 - ADRs: ADR-6, ADR-7, ADR-12, ADR-14
