@@ -58,6 +58,15 @@ func (r *Repository) ListByDistance(ctx context.Context, distanceID uuid.UUID) (
 }
 
 // Delete removes a route
+// EventOrganizer returns the organizer owning the event (ownership support).
+func (r *Repository) EventOrganizer(ctx context.Context, eventID uuid.UUID) (uuid.UUID, error) {
+	e, err := r.store.Queries.GetEvent(ctx, eventID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("event not found: %w", err)
+	}
+	return e.OrganizerID, nil
+}
+
 func (r *Repository) Delete(ctx context.Context, id uuid.UUID) error {
 	err := r.store.Queries.DeleteRoute(ctx, id)
 	if err != nil {

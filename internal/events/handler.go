@@ -1,14 +1,16 @@
 package events
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
+	"kinetix-api/internal/httpx"
 	"kinetix-api/internal/json"
+	"kinetix-api/internal/middleware"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
 )
 
 // Handler handles HTTP requests for events
@@ -79,7 +81,8 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	evt, err := h.service.Create(r.Context(), req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	evt, err := h.service.Create(r.Context(), claims, req)
 	if err != nil {
 		// Use json.WriteError so the error string is properly escaped.
 		// Previously we did `http.Error(w, `{"error":"`+err.Error()+`"}`, ...)`
@@ -97,15 +100,14 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 
 // GetEvent handles GET /events/{id}
 func (h *Handler) GetEvent(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid event ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	evt, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
-		http.Error(w, `{"error":"event not found"}`, http.StatusNotFound)
+		httpx.WriteError(w, r, fmt.Errorf("event not found: %w", httpx.ErrNotFound))
 		return
 	}
 
@@ -117,15 +119,14 @@ func (h *Handler) GetEvent(w http.ResponseWriter, r *http.Request) {
 
 // GetEventDetail handles GET /events/{id}/detail
 func (h *Handler) GetEventDetail(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid event ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	detail, err := h.service.GetFullEventDetail(r.Context(), id)
 	if err != nil {
-		http.Error(w, `{"error":"event not found"}`, http.StatusNotFound)
+		httpx.WriteError(w, r, fmt.Errorf("event not found: %w", httpx.ErrNotFound))
 		return
 	}
 
@@ -138,7 +139,7 @@ func (h *Handler) GetEventBySlug(w http.ResponseWriter, r *http.Request) {
 
 	evt, err := h.service.GetBySlug(r.Context(), slug)
 	if err != nil {
-		http.Error(w, `{"error":"event not found"}`, http.StatusNotFound)
+		httpx.WriteError(w, r, fmt.Errorf("event not found: %w", httpx.ErrNotFound))
 		return
 	}
 
@@ -164,7 +165,7 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 
 	events, total, err := h.service.List(r.Context(), status, limit, offset)
 	if err != nil {
-		http.Error(w, `{"error":"failed to list events"}`, http.StatusInternalServerError)
+		httpx.WriteError(w, r, fmt.Errorf("failed to list events: %w", err))
 		return
 	}
 
@@ -177,19 +178,19 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 
 // UpdateEvent handles PUT /events/{id}
 func (h *Handler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid event ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	var req UpdateEventRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	evt, err := h.service.Update(r.Context(), id, req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	evt, err := h.service.Update(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -203,9 +204,8 @@ func (h *Handler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 
 // UpdateEventStatus handles PATCH /events/{id}/status
 func (h *Handler) UpdateEventStatus(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid event ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
@@ -213,11 +213,12 @@ func (h *Handler) UpdateEventStatus(w http.ResponseWriter, r *http.Request) {
 		Status string `json:"status"`
 	}
 	if err := json.Read(r, &body); err != nil || body.Status == "" {
-		http.Error(w, `{"error":"status is required"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "status is required")
 		return
 	}
 
-	evt, err := h.service.UpdateStatus(r.Context(), id, body.Status)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	evt, err := h.service.UpdateStatus(r.Context(), claims, id, body.Status)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -231,19 +232,19 @@ func (h *Handler) UpdateEventStatus(w http.ResponseWriter, r *http.Request) {
 
 // UpdateParticipantFields handles PUT /events/{id}/participant-fields
 func (h *Handler) UpdateParticipantFields(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid event ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	var req UpdateParticipantFieldsRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	if err := h.service.UpdateParticipantFields(r.Context(), id, req); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.UpdateParticipantFields(r.Context(), claims, id, req); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -255,9 +256,8 @@ func (h *Handler) UpdateParticipantFields(w http.ResponseWriter, r *http.Request
 
 // GetFieldConfig handles GET /events/{id}/field-config
 func (h *Handler) GetFieldConfig(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid event ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
@@ -272,19 +272,19 @@ func (h *Handler) GetFieldConfig(w http.ResponseWriter, r *http.Request) {
 
 // UpdateFieldConfig handles PUT /events/{id}/field-config
 func (h *Handler) UpdateFieldConfig(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid event ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	var req UpdateEventFieldConfigRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	if err := h.service.UpdateFieldConfig(r.Context(), id, req); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.UpdateFieldConfig(r.Context(), claims, id, req); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -296,13 +296,13 @@ func (h *Handler) UpdateFieldConfig(w http.ResponseWriter, r *http.Request) {
 
 // DeleteEvent handles DELETE /events/{id}
 func (h *Handler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid event ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), id); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.Delete(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -318,11 +318,12 @@ func (h *Handler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateAward(w http.ResponseWriter, r *http.Request) {
 	var req CreateAwardRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	award, err := h.service.CreateAward(r.Context(), req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	award, err := h.service.CreateAward(r.Context(), claims, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -336,15 +337,14 @@ func (h *Handler) CreateAward(w http.ResponseWriter, r *http.Request) {
 
 // GetAward handles GET /events/awards/{id}
 func (h *Handler) GetAward(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid award ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	award, err := h.service.GetAward(r.Context(), id)
 	if err != nil {
-		http.Error(w, `{"error":"award not found"}`, http.StatusNotFound)
+		httpx.WriteError(w, r, fmt.Errorf("award not found: %w", httpx.ErrNotFound))
 		return
 	}
 
@@ -356,15 +356,14 @@ func (h *Handler) GetAward(w http.ResponseWriter, r *http.Request) {
 
 // ListAwards handles GET /events/distance/{distance_id}/awards
 func (h *Handler) ListAwards(w http.ResponseWriter, r *http.Request) {
-	distanceID, err := uuid.Parse(chi.URLParam(r, "distance_id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid distance ID"}`, http.StatusBadRequest)
+	distanceID, ok := httpx.UUIDParam(w, r, "distance_id")
+	if !ok {
 		return
 	}
 
 	awards, err := h.service.ListAwardsByDistance(r.Context(), distanceID)
 	if err != nil {
-		http.Error(w, `{"error":"failed to list awards"}`, http.StatusInternalServerError)
+		httpx.WriteError(w, r, fmt.Errorf("failed to list awards: %w", err))
 		return
 	}
 
@@ -376,19 +375,19 @@ func (h *Handler) ListAwards(w http.ResponseWriter, r *http.Request) {
 
 // UpdateAward handles PUT /events/awards/{id}
 func (h *Handler) UpdateAward(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid award ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	var req UpdateAwardRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	award, err := h.service.UpdateAward(r.Context(), id, req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	award, err := h.service.UpdateAward(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -402,13 +401,13 @@ func (h *Handler) UpdateAward(w http.ResponseWriter, r *http.Request) {
 
 // DeleteAward handles DELETE /events/awards/{id}
 func (h *Handler) DeleteAward(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid award ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
-	if err := h.service.DeleteAward(r.Context(), id); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.DeleteAward(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -424,11 +423,12 @@ func (h *Handler) DeleteAward(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreatePricingStage(w http.ResponseWriter, r *http.Request) {
 	var req CreatePricingStageRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	stage, err := h.service.CreatePricingStage(r.Context(), req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	stage, err := h.service.CreatePricingStage(r.Context(), claims, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -442,15 +442,14 @@ func (h *Handler) CreatePricingStage(w http.ResponseWriter, r *http.Request) {
 
 // GetPricingStage handles GET /events/pricing/{id}
 func (h *Handler) GetPricingStage(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid pricing stage ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	stage, err := h.service.GetPricingStage(r.Context(), id)
 	if err != nil {
-		http.Error(w, `{"error":"pricing stage not found"}`, http.StatusNotFound)
+		httpx.WriteError(w, r, fmt.Errorf("pricing stage not found: %w", httpx.ErrNotFound))
 		return
 	}
 
@@ -462,15 +461,14 @@ func (h *Handler) GetPricingStage(w http.ResponseWriter, r *http.Request) {
 
 // ListPricingStages handles GET /events/distance/{distance_id}/pricing
 func (h *Handler) ListPricingStages(w http.ResponseWriter, r *http.Request) {
-	distanceID, err := uuid.Parse(chi.URLParam(r, "distance_id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid distance ID"}`, http.StatusBadRequest)
+	distanceID, ok := httpx.UUIDParam(w, r, "distance_id")
+	if !ok {
 		return
 	}
 
 	stages, err := h.service.ListPricingStagesByDistance(r.Context(), distanceID)
 	if err != nil {
-		http.Error(w, `{"error":"failed to list pricing stages"}`, http.StatusInternalServerError)
+		httpx.WriteError(w, r, fmt.Errorf("failed to list pricing stages: %w", err))
 		return
 	}
 
@@ -482,15 +480,14 @@ func (h *Handler) ListPricingStages(w http.ResponseWriter, r *http.Request) {
 
 // GetCurrentPricing handles GET /events/distance/{distance_id}/pricing/current
 func (h *Handler) GetCurrentPricing(w http.ResponseWriter, r *http.Request) {
-	distanceID, err := uuid.Parse(chi.URLParam(r, "distance_id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid distance ID"}`, http.StatusBadRequest)
+	distanceID, ok := httpx.UUIDParam(w, r, "distance_id")
+	if !ok {
 		return
 	}
 
 	stages, err := h.service.GetCurrentPricing(r.Context(), distanceID)
 	if err != nil {
-		http.Error(w, `{"error":"failed to get current pricing"}`, http.StatusInternalServerError)
+		httpx.WriteError(w, r, fmt.Errorf("failed to get current pricing: %w", err))
 		return
 	}
 
@@ -502,19 +499,19 @@ func (h *Handler) GetCurrentPricing(w http.ResponseWriter, r *http.Request) {
 
 // UpdatePricingStage handles PUT /events/pricing/{id}
 func (h *Handler) UpdatePricingStage(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid pricing stage ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	var req UpdatePricingStageRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	stage, err := h.service.UpdatePricingStage(r.Context(), id, req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	stage, err := h.service.UpdatePricingStage(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -528,13 +525,13 @@ func (h *Handler) UpdatePricingStage(w http.ResponseWriter, r *http.Request) {
 
 // DeletePricingStage handles DELETE /events/pricing/{id}
 func (h *Handler) DeletePricingStage(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid pricing stage ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
-	if err := h.service.DeletePricingStage(r.Context(), id); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.DeletePricingStage(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -550,11 +547,12 @@ func (h *Handler) DeletePricingStage(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateSponsor(w http.ResponseWriter, r *http.Request) {
 	var req CreateSponsorRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	sponsor, err := h.service.CreateSponsor(r.Context(), req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	sponsor, err := h.service.CreateSponsor(r.Context(), claims, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -568,15 +566,14 @@ func (h *Handler) CreateSponsor(w http.ResponseWriter, r *http.Request) {
 
 // GetSponsor handles GET /events/sponsors/{id}
 func (h *Handler) GetSponsor(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid sponsor ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	sponsor, err := h.service.GetSponsor(r.Context(), id)
 	if err != nil {
-		http.Error(w, `{"error":"sponsor not found"}`, http.StatusNotFound)
+		httpx.WriteError(w, r, fmt.Errorf("sponsor not found: %w", httpx.ErrNotFound))
 		return
 	}
 
@@ -588,15 +585,14 @@ func (h *Handler) GetSponsor(w http.ResponseWriter, r *http.Request) {
 
 // ListSponsors handles GET /events/event/{event_id}/sponsors
 func (h *Handler) ListSponsors(w http.ResponseWriter, r *http.Request) {
-	eventID, err := uuid.Parse(chi.URLParam(r, "event_id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid event ID"}`, http.StatusBadRequest)
+	eventID, ok := httpx.UUIDParam(w, r, "event_id")
+	if !ok {
 		return
 	}
 
 	sponsors, err := h.service.ListSponsorsByEvent(r.Context(), eventID)
 	if err != nil {
-		http.Error(w, `{"error":"failed to list sponsors"}`, http.StatusInternalServerError)
+		httpx.WriteError(w, r, fmt.Errorf("failed to list sponsors: %w", err))
 		return
 	}
 
@@ -608,19 +604,19 @@ func (h *Handler) ListSponsors(w http.ResponseWriter, r *http.Request) {
 
 // UpdateSponsor handles PUT /events/sponsors/{id}
 func (h *Handler) UpdateSponsor(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid sponsor ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	var req UpdateSponsorRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	sponsor, err := h.service.UpdateSponsor(r.Context(), id, req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	sponsor, err := h.service.UpdateSponsor(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -634,13 +630,13 @@ func (h *Handler) UpdateSponsor(w http.ResponseWriter, r *http.Request) {
 
 // DeleteSponsor handles DELETE /events/sponsors/{id}
 func (h *Handler) DeleteSponsor(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid sponsor ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
-	if err := h.service.DeleteSponsor(r.Context(), id); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.DeleteSponsor(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -656,11 +652,12 @@ func (h *Handler) DeleteSponsor(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateRegistrationLocation(w http.ResponseWriter, r *http.Request) {
 	var req CreateRegistrationLocationRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	loc, err := h.service.CreateRegistrationLocation(r.Context(), req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	loc, err := h.service.CreateRegistrationLocation(r.Context(), claims, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -674,15 +671,14 @@ func (h *Handler) CreateRegistrationLocation(w http.ResponseWriter, r *http.Requ
 
 // GetRegistrationLocation handles GET /events/locations/{id}
 func (h *Handler) GetRegistrationLocation(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid location ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	loc, err := h.service.GetRegistrationLocation(r.Context(), id)
 	if err != nil {
-		http.Error(w, `{"error":"registration location not found"}`, http.StatusNotFound)
+		httpx.WriteError(w, r, fmt.Errorf("registration location not found: %w", httpx.ErrNotFound))
 		return
 	}
 
@@ -694,15 +690,14 @@ func (h *Handler) GetRegistrationLocation(w http.ResponseWriter, r *http.Request
 
 // ListRegistrationLocations handles GET /events/event/{event_id}/locations
 func (h *Handler) ListRegistrationLocations(w http.ResponseWriter, r *http.Request) {
-	eventID, err := uuid.Parse(chi.URLParam(r, "event_id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid event ID"}`, http.StatusBadRequest)
+	eventID, ok := httpx.UUIDParam(w, r, "event_id")
+	if !ok {
 		return
 	}
 
 	locations, err := h.service.ListRegistrationLocationsByEvent(r.Context(), eventID)
 	if err != nil {
-		http.Error(w, `{"error":"failed to list registration locations"}`, http.StatusInternalServerError)
+		httpx.WriteError(w, r, fmt.Errorf("failed to list registration locations: %w", err))
 		return
 	}
 
@@ -714,19 +709,19 @@ func (h *Handler) ListRegistrationLocations(w http.ResponseWriter, r *http.Reque
 
 // UpdateRegistrationLocation handles PUT /events/locations/{id}
 func (h *Handler) UpdateRegistrationLocation(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid location ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	var req UpdateRegistrationLocationRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	loc, err := h.service.UpdateRegistrationLocation(r.Context(), id, req)
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	loc, err := h.service.UpdateRegistrationLocation(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -740,13 +735,13 @@ func (h *Handler) UpdateRegistrationLocation(w http.ResponseWriter, r *http.Requ
 
 // DeleteRegistrationLocation handles DELETE /events/locations/{id}
 func (h *Handler) DeleteRegistrationLocation(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid location ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
-	if err := h.service.DeleteRegistrationLocation(r.Context(), id); err != nil {
+	claims, _ := middleware.ClaimsFrom(r.Context())
+	if err := h.service.DeleteRegistrationLocation(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}

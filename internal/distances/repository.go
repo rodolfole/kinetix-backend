@@ -64,6 +64,24 @@ func (r *Repository) Create(ctx context.Context, req CreateDistanceRequest) (db.
 }
 
 // GetByID retrieves a distance by ID
+// EventOrganizer returns the organizer owning the event (ownership support).
+func (r *Repository) EventOrganizer(ctx context.Context, eventID uuid.UUID) (uuid.UUID, error) {
+	e, err := r.store.Queries.GetEvent(ctx, eventID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("event not found: %w", err)
+	}
+	return e.OrganizerID, nil
+}
+
+// EventOrganizerByDistance resolves the organizer through the distance's event.
+func (r *Repository) EventOrganizerByDistance(ctx context.Context, distanceID uuid.UUID) (uuid.UUID, error) {
+	d, err := r.GetByID(ctx, distanceID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("distance not found: %w", err)
+	}
+	return r.EventOrganizer(ctx, d.EventID)
+}
+
 func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (db.Distance, error) {
 	dist, err := r.store.Queries.GetDistance(ctx, id)
 	if err != nil {

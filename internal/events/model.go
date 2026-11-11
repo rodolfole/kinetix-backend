@@ -15,25 +15,25 @@ type ItineraryItem struct {
 
 // Event represents an event entity
 type Event struct {
-	ID           uuid.UUID      `json:"id"`
-	OrganizerID  uuid.UUID      `json:"organizer_id"`
-	Name         string         `json:"name"`
-	Slug         string         `json:"slug"`
-	Description  string         `json:"description"`
-	EventDate    time.Time      `json:"event_date"`
-	Deadline     time.Time      `json:"deadline"`
-	State        string         `json:"state"`
-	Municipality string         `json:"municipality"`
-	Address      string         `json:"address"`
-	LogoURL      string         `json:"logo_url,omitempty"`
-	Judges       string         `json:"judges"`
-	Rules        string         `json:"rules"`
-	Risks        string         `json:"risks"`
-	Transit      string         `json:"transit"`
+	ID           uuid.UUID       `json:"id"`
+	OrganizerID  uuid.UUID       `json:"organizer_id"`
+	Name         string          `json:"name"`
+	Slug         string          `json:"slug"`
+	Description  string          `json:"description"`
+	EventDate    time.Time       `json:"event_date"`
+	Deadline     time.Time       `json:"deadline"`
+	State        string          `json:"state"`
+	Municipality string          `json:"municipality"`
+	Address      string          `json:"address"`
+	LogoURL      string          `json:"logo_url,omitempty"`
+	Judges       string          `json:"judges"`
+	Rules        string          `json:"rules"`
+	Risks        string          `json:"risks"`
+	Transit      string          `json:"transit"`
 	Itinerary    []ItineraryItem `json:"itinerary"`
-	Status       string         `json:"status"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	Status       string          `json:"status"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
 // Distance represents a distance entity
@@ -54,13 +54,13 @@ type Distance struct {
 
 // Award represents an award entity
 type Award struct {
-	ID             uuid.UUID `json:"id"`
-	DistanceID     uuid.UUID `json:"distance_id"`
-	AgeCategoryID  uuid.UUID `json:"age_category_id"`
-	Gender         string    `json:"gender"`
-	Place          int       `json:"place"`
-	PrizeAmount    float64   `json:"prize_amount"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID            uuid.UUID `json:"id"`
+	DistanceID    uuid.UUID `json:"distance_id"`
+	AgeCategoryID uuid.UUID `json:"age_category_id"`
+	Gender        string    `json:"gender"`
+	Place         int       `json:"place"`
+	PrizeCents    int64     `json:"prize_cents"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // PricingStage represents a pricing stage entity
@@ -68,7 +68,7 @@ type PricingStage struct {
 	ID          uuid.UUID `json:"id"`
 	DistanceID  uuid.UUID `json:"distance_id"`
 	Name        string    `json:"name"`
-	Price       float64   `json:"price"`
+	PriceCents  int64     `json:"price_cents"`
 	StartDate   time.Time `json:"start_date"`
 	EndDate     time.Time `json:"end_date"`
 	IsEarlyBird bool      `json:"is_early_bird"`
@@ -98,13 +98,13 @@ type RegistrationLocation struct {
 
 // EventParticipantField represents a participant field configuration for an event
 type EventParticipantField struct {
-	ID          uuid.UUID `json:"id"`
-	EventID     uuid.UUID `json:"event_id"`
-	FieldName   string    `json:"field_name"`
-	IsRequired  bool      `json:"is_required"`
-	IsEnabled   bool      `json:"is_enabled"`
-	DisplayOrder int      `json:"display_order"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID           uuid.UUID `json:"id"`
+	EventID      uuid.UUID `json:"event_id"`
+	FieldName    string    `json:"field_name"`
+	IsRequired   bool      `json:"is_required"`
+	IsEnabled    bool      `json:"is_enabled"`
+	DisplayOrder int       `json:"display_order"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // ParticipantFieldConfig represents the config returned in event detail
@@ -128,11 +128,11 @@ type ParticipantFieldConfigInput struct {
 
 // RunnerKitItem represents a single item in the runner kit (separate table)
 type RunnerKitItem struct {
-	ID          uuid.UUID `json:"id"`
-	EventID     uuid.UUID `json:"event_id"`
-	Name        string    `json:"name"`
-	Icon        string    `json:"icon"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID        uuid.UUID `json:"id"`
+	EventID   uuid.UUID `json:"event_id"`
+	Name      string    `json:"name"`
+	Icon      string    `json:"icon"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // EventFieldConfig represents a toggleable section configuration for an event
@@ -201,8 +201,8 @@ type CreateAwardRequest struct {
 	AgeCategoryID uuid.UUID `json:"age_category_id" validate:"required"`
 	Gender        string    `json:"gender" validate:"required,oneof=male female general"`
 	// Posición del lugar (1 = primer lugar). Default 1 si el caller omite.
-	Place       int     `json:"place" validate:"omitempty,gte=1,lte=20"`
-	PrizeAmount float64 `json:"prize_amount" validate:"required,gte=0"`
+	Place      int   `json:"place" validate:"omitempty,gte=1,lte=20"`
+	PrizeCents int64 `json:"prize_cents" validate:"required,gte=0"`
 }
 
 // UpdateAwardRequest represents the request body for updating an award
@@ -210,14 +210,14 @@ type UpdateAwardRequest struct {
 	AgeCategoryID uuid.UUID `json:"age_category_id" validate:"required"`
 	Gender        string    `json:"gender" validate:"required,oneof=male female general"`
 	Place         int       `json:"place" validate:"omitempty,gte=1,lte=20"`
-	PrizeAmount   float64   `json:"prize_amount" validate:"required,gte=0"`
+	PrizeCents    int64     `json:"prize_cents" validate:"required,gte=0"`
 }
 
 // CreatePricingStageRequest represents the request body for creating a pricing stage
 type CreatePricingStageRequest struct {
 	DistanceID  uuid.UUID `json:"distance_id" validate:"required"`
 	Name        string    `json:"name" validate:"omitempty,max=100"`
-	Price       float64   `json:"price" validate:"required,gte=0"`
+	PriceCents  int64     `json:"price_cents" validate:"required,gte=0"`
 	StartDate   time.Time `json:"start_date" validate:"required"`
 	EndDate     time.Time `json:"end_date" validate:"required"`
 	IsEarlyBird bool      `json:"is_early_bird"`
@@ -226,7 +226,7 @@ type CreatePricingStageRequest struct {
 // UpdatePricingStageRequest represents the request body for updating a pricing stage
 type UpdatePricingStageRequest struct {
 	Name        string    `json:"name" validate:"omitempty,max=100"`
-	Price       float64   `json:"price" validate:"required,gte=0"`
+	PriceCents  int64     `json:"price_cents" validate:"required,gte=0"`
 	StartDate   time.Time `json:"start_date" validate:"required"`
 	EndDate     time.Time `json:"end_date" validate:"required"`
 	IsEarlyBird bool      `json:"is_early_bird"`

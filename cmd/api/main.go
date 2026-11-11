@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"kinetix-api/internal/admin"
 	"kinetix-api/internal/agecategories"
 	"kinetix-api/internal/auth"
 	"kinetix-api/internal/config"
@@ -18,6 +19,7 @@ import (
 	"kinetix-api/internal/events"
 	"kinetix-api/internal/features/tags"
 	kinetix_middleware "kinetix-api/internal/middleware"
+	"kinetix-api/internal/mp"
 	"kinetix-api/internal/orders"
 	"kinetix-api/internal/organizers"
 	"kinetix-api/internal/participants"
@@ -40,6 +42,10 @@ import (
 // @in header
 // @name Authorization
 func main() {
+	// Structured JSON logging (PLAN-16 T14): leveled, machine-readable.
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	slog.Debug("logging configured")
+
 	// Load configuration
 	cfg := config.Load()
 
@@ -56,7 +62,8 @@ func main() {
 		SSLMode:  cfg.Database.SSLMode,
 	})
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		slog.Error("database connection failed", slog.Any("err", err))
+		os.Exit(1)
 	}
 	defer database.ClosePool(pool)
 
@@ -64,9 +71,13 @@ func main() {
 	appStore := store.NewStore(pool)
 
 	// Initialize JWT config
+	tokenExp, err := time.ParseDuration(cfg.JWT.TokenExpiry)
+	if err != nil || tokenExp <= 0 {
+		tokenExp = 24 * time.Hour
+	}
 	jwtCfg := auth.Config{
 		SecretKey:     cfg.JWT.SecretKey,
-		TokenExpiry:   24 * time.Hour,
+		TokenExpiry:   tokenExp,
 		RefreshExpiry: 7 * 24 * time.Hour,
 	}
 
@@ -76,21 +87,20 @@ func main() {
 	participantRepo := participants.NewRepository(appStore)
 	registrationRepo := registrations.NewRepository(appStore)
 	orderRepo := orders.NewRepository(appStore)
+	adminRepo := admin.NewRepository(appStore)
 
 	// Initialize services
 	organizerService := organizers.NewService(organizerRepo, validator)
 	eventService := events.NewService(eventRepo, validator)
 	participantService := participants.NewService(participantRepo, validator)
-	registrationService := registrations.NewService(registrationRepo, appStore, validator)
-	orderService := orders.NewService(orderRepo, validator)
+	registrationService := registrations.NewService(registrationRepo, registrationRepo, validator) // its ExecTx adapts store.ExecTx
+	orderService := orders.NewService(orderRepo, adminRepo, orders.NewPaidTxRunner(appStore), validator)
+	adminService := admin.NewService(adminRepo)
+	mpClient := mp.NewClient(cfg.MercadoPago)
 
 	// Initialize auth service and handler
 	// JWT secret comes from config.Load() which panics if JWT_SECRET is not set
-	authCfg := auth.Config{
-		SecretKey:     cfg.JWT.SecretKey,
-		TokenExpiry:   24 * time.Hour,
-		RefreshExpiry: 7 * 24 * time.Hour,
-	}
+	authCfg := jwtCfg // single JWT configuration (was duplicated)
 	authService := auth.NewService(appStore, authCfg)
 	authHandler := auth.NewHandler(authService, validator)
 
@@ -122,7 +132,7 @@ func main() {
 	eventHandler := events.NewHandler(eventService, validator)
 	participantHandler := participants.NewHandler(participantService)
 	registrationHandler := registrations.NewHandler(registrationService)
-	orderHandler := orders.NewHandler(orderService, cfg.MercadoPago.WebhookSecret)
+	orderHandler := orders.NewHandler(orderService, cfg.MercadoPago.WebhookSecret, mpClient) // payment webhooks confirm with MP
 
 	// Setup router
 	r := chi.NewRouter()
@@ -130,10 +140,18 @@ func main() {
 	// Global middleware
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
-	r.Use(chimiddleware.Logger)
+	kinetix_middleware.RequestIDResolver = func(r *http.Request) string {
+		if v := r.Context().Value(chimiddleware.RequestIDKey); v != nil {
+			if id, ok := v.(string); ok {
+				return id
+			}
+		}
+		return ""
+	}
+	r.Use(kinetix_middleware.RequestLogger)
 	r.Use(chimiddleware.Recoverer)
 	r.Use(chimiddleware.Timeout(60 * time.Second))
-	r.Use(kinetix_middleware.CORS())
+	r.Use(kinetix_middleware.CORS(cfg.Server.CORSAllowedOrigins))
 
 	// Public routes
 	r.Get("/health", healthCheck)
@@ -188,53 +206,58 @@ func main() {
 			r.Put("/organizers/{id}", organizerHandler.UpdateOrganizer)
 			r.Delete("/organizers/{id}", organizerHandler.DeleteOrganizer)
 
-			// Distances management (protected)
-			r.Route("/distances", func(r chi.Router) {
-				distanceHandler.Routes(r)
-			})
+			// Event management: organizers and admins only (participants get 403).
+			r.Group(func(r chi.Router) {
+				r.Use(kinetix_middleware.RequireAnyRole("organizer", "admin"))
 
-			// Event management (protected) — individual paths, no subrouter at /events
-			r.Post("/events", eventHandler.CreateEvent)
-			r.Put("/events/{id}", eventHandler.UpdateEvent)
-			r.Patch("/events/{id}/status", eventHandler.UpdateEventStatus)
-			r.Delete("/events/{id}", eventHandler.DeleteEvent)
+				// Distances management (protected)
+				r.Route("/distances", func(r chi.Router) {
+					distanceHandler.Routes(r)
+				})
 
-			r.Post("/events/awards", eventHandler.CreateAward)
-			r.Get("/events/awards/{id}", eventHandler.GetAward)
-			r.Put("/events/awards/{id}", eventHandler.UpdateAward)
-			r.Delete("/events/awards/{id}", eventHandler.DeleteAward)
+				// Event management (protected) — individual paths, no subrouter at /events
+				r.Post("/events", eventHandler.CreateEvent)
+				r.Put("/events/{id}", eventHandler.UpdateEvent)
+				r.Patch("/events/{id}/status", eventHandler.UpdateEventStatus)
+				r.Delete("/events/{id}", eventHandler.DeleteEvent)
 
-			r.Post("/events/pricing", eventHandler.CreatePricingStage)
-			r.Get("/events/pricing/{id}", eventHandler.GetPricingStage)
-			r.Put("/events/pricing/{id}", eventHandler.UpdatePricingStage)
-			r.Delete("/events/pricing/{id}", eventHandler.DeletePricingStage)
+				r.Post("/events/awards", eventHandler.CreateAward)
+				r.Get("/events/awards/{id}", eventHandler.GetAward)
+				r.Put("/events/awards/{id}", eventHandler.UpdateAward)
+				r.Delete("/events/awards/{id}", eventHandler.DeleteAward)
 
-			r.Post("/events/sponsors", eventHandler.CreateSponsor)
-			r.Get("/events/sponsors/{id}", eventHandler.GetSponsor)
-			r.Put("/events/sponsors/{id}", eventHandler.UpdateSponsor)
-			r.Delete("/events/sponsors/{id}", eventHandler.DeleteSponsor)
+				r.Post("/events/pricing", eventHandler.CreatePricingStage)
+				r.Get("/events/pricing/{id}", eventHandler.GetPricingStage)
+				r.Put("/events/pricing/{id}", eventHandler.UpdatePricingStage)
+				r.Delete("/events/pricing/{id}", eventHandler.DeletePricingStage)
 
-			r.Post("/events/locations", eventHandler.CreateRegistrationLocation)
-			r.Get("/events/locations/{id}", eventHandler.GetRegistrationLocation)
-			r.Put("/events/locations/{id}", eventHandler.UpdateRegistrationLocation)
-			r.Delete("/events/locations/{id}", eventHandler.DeleteRegistrationLocation)
+				r.Post("/events/sponsors", eventHandler.CreateSponsor)
+				r.Get("/events/sponsors/{id}", eventHandler.GetSponsor)
+				r.Put("/events/sponsors/{id}", eventHandler.UpdateSponsor)
+				r.Delete("/events/sponsors/{id}", eventHandler.DeleteSponsor)
 
-			// Field config (protected) — togglable optional sections per event
-			r.Get("/events/{id}/field-config", eventHandler.GetFieldConfig)
-			r.Put("/events/{id}/field-config", eventHandler.UpdateFieldConfig)
+				r.Post("/events/locations", eventHandler.CreateRegistrationLocation)
+				r.Get("/events/locations/{id}", eventHandler.GetRegistrationLocation)
+				r.Put("/events/locations/{id}", eventHandler.UpdateRegistrationLocation)
+				r.Delete("/events/locations/{id}", eventHandler.DeleteRegistrationLocation)
 
-			// Tags management (protected)
-			r.Post("/events/tags", tagHandler.Create)
-			r.Delete("/events/tags/{id}", tagHandler.Delete)
+				// Field config (protected) — togglable optional sections per event
+				// GET is public (registered above); a second GET here would shadow it.
+				r.Put("/events/{id}/field-config", eventHandler.UpdateFieldConfig)
 
-			// Runner kits management (protected)
-			r.Route("/runner-kits", func(r chi.Router) {
-				runnerKitHandler.Routes(r)
-			})
+				// Tags management (protected)
+				r.Post("/events/tags", tagHandler.Create)
+				r.Delete("/events/tags/{id}", tagHandler.Delete)
 
-			// Routes management (protected)
-			r.Route("/routes", func(r chi.Router) {
-				routesHandler.Routes(r)
+				// Runner kits management (protected)
+				r.Route("/runner-kits", func(r chi.Router) {
+					runnerKitHandler.Routes(r)
+				})
+
+				// Routes management (protected)
+				r.Route("/routes", func(r chi.Router) {
+					routesHandler.Routes(r)
+				})
 			})
 
 			// Participants (protected)
@@ -251,6 +274,18 @@ func main() {
 			r.Route("/orders", func(r chi.Router) {
 				orderHandler.Routes(r)
 			})
+
+			// Admin (protected, requires role=admin)
+			adminHandler := admin.NewHandlerWithMP(adminService, validator, mpClient, cfg.JWT.SecretKey) // sign OAuth states with the same secret
+			r.Group(func(r chi.Router) {
+				r.Use(kinetix_middleware.RequireRole("admin"))
+				r.Get("/admin/config", adminHandler.GetConfig)
+				r.Put("/admin/config", adminHandler.UpdateConfig)
+				r.Get("/admin/payouts", adminHandler.ListPayouts)
+				r.Get("/admin/organizers/{id}/connect-mp", adminHandler.ConnectMP)
+				r.Post("/admin/organizers/callback", adminHandler.OAuthCallback)
+				r.Post("/admin/payouts/{id}/send", adminHandler.SendPayout)
+			})
 		})
 
 		// Webhook routes (no auth required)
@@ -259,7 +294,7 @@ func main() {
 
 	// Start server
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
-	log.Printf("Starting server on %s", addr)
+	slog.Info("starting server", slog.String("addr", addr))
 
 	srv := &http.Server{
 		Addr:    addr,
@@ -269,7 +304,8 @@ func main() {
 	// Graceful shutdown
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
+			slog.Error("server failed to start", slog.Any("err", err))
+			os.Exit(1)
 		}
 	}()
 
@@ -278,16 +314,17 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	slog.Info("shutting down server")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		slog.Error("forced shutdown", slog.Any("err", err))
+		os.Exit(1)
 	}
 
-	log.Println("Server exited properly")
+	slog.Info("server exited cleanly")
 }
 
 // healthCheck handles GET /health

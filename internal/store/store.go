@@ -10,13 +10,18 @@ import (
 	repo "kinetix-api/internal/adapters/postgresql/sqlc"
 )
 
-// Store define la estructura que orquestará la DB y las Queries
+// TxStarter abstracts the concrete pool so ExecTx is unit-testable with a
+// fake transaction (ADR-14).
+type TxStarter interface {
+	BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error)
+}
+
+// Store wraps a pgxpool and the sqlc Queries bound to it.
 type Store struct {
-	db      *pgxpool.Pool
+	db      TxStarter
 	Queries *repo.Queries
 }
 
-// NewStore crea una nueva instancia del Store
 func NewStore(db *pgxpool.Pool) *Store {
 	return &Store{
 		db:      db,
@@ -24,42 +29,26 @@ func NewStore(db *pgxpool.Pool) *Store {
 	}
 }
 
-// WithTransaction ejecuta una función dentro de una transacción de base de datos
-func (s *Store) WithTransaction(ctx context.Context, fn func(*repo.Queries) error) error {
-	// 1. Iniciar la transacción
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return fmt.Errorf("could not begin transaction: %w", err)
-	}
-
-	// 2. Asegurar rollback si hay error
-	defer func() {
-		if tx != nil {
-			_ = tx.Rollback(ctx)
-		}
-	}()
-
-	// 3. Crear un objeto Queries vinculado a esta transacción específica
-	q := s.Queries.WithTx(tx)
-
-	// 4. Ejecutar la función callback que contiene la lógica del Service
-	err = fn(q)
-	if err != nil {
-		return fmt.Errorf("transaction failed: %w", err)
-	}
-
-	// 5. Si todo salió bien, hacemos Commit
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("could not commit transaction: %w", err)
-	}
-
-	// Prevenir rollback defer después de commit exitoso
-	tx = nil
-
-	return nil
+// WithQueries returns a Store clone bound to the given (usually
+// transaction-scoped) Queries. Persist-transparent for adapters (ADR-14).
+func (s *Store) WithQueries(q *repo.Queries) *Store {
+	return &Store{db: s.db, Queries: q}
 }
 
-// GetPool devuelve el pool de conexiones por si se necesita acceso directo de bajo nivel
-func (s *Store) GetPool() *pgxpool.Pool {
-	return s.db
+// ExecTx runs fn inside a database transaction with tx-scoped Queries.
+// Multi-row writes (auth registration, registrations, webhook paid+payout)
+// must use it: a failure rolls every write in fn back.
+func (s *Store) ExecTx(ctx context.Context, fn func(q *repo.Queries) error) error {
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+
+	if err := fn(repo.New(tx)); err != nil {
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			return fmt.Errorf("tx failed: %v (rollback failed: %w)", err, rbErr)
+		}
+		return err
+	}
+	return tx.Commit(ctx)
 }

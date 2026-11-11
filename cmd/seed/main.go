@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	db "kinetix-api/internal/adapters/postgresql/sqlc"
 	"kinetix-api/internal/config"
 	"kinetix-api/internal/database"
 	"kinetix-api/internal/database/convert"
-	db "kinetix-api/internal/adapters/postgresql/sqlc"
 	"kinetix-api/internal/distances"
 	"kinetix-api/internal/events"
 	"kinetix-api/internal/organizers"
@@ -224,7 +224,7 @@ func (s *Seeder) Run() error {
 	// Create registrations with bib numbers
 	log.Println("Creating registrations...")
 	regRepo := registrations.NewRepository(s.store)
-	regService := registrations.NewService(regRepo, s.store, s.validator)
+	regService := registrations.NewService(regRepo, regRepo, s.validator)
 
 	// Check which participants already have a registration for this event
 	type participantReg struct {
@@ -284,9 +284,9 @@ func (s *Seeder) Run() error {
 	hashedPassword := string(hashBytes)
 
 	type userDef struct {
-		email        string
-		role         string
-		organizerID  *uuid.UUID
+		email         string
+		role          string
+		organizerID   *uuid.UUID
 		participantID *uuid.UUID
 	}
 
@@ -299,8 +299,8 @@ func (s *Seeder) Run() error {
 	for _, p := range createdParticipants {
 		p := p
 		userDefs = append(userDefs, userDef{
-			email:          p.Email,
-			role:           "participant",
+			email:         p.Email,
+			role:          "participant",
 			participantID: &p.ID,
 		})
 	}
@@ -407,7 +407,7 @@ func (s *Seeder) createEvent(ctx context.Context, organizerID uuid.UUID) (events
 		},
 	}
 
-	evt, err := service.Create(ctx, req)
+	evt, err := service.Create(ctx, nil, req) // seed has no claims; handler-level authz would reject, seed writes straight
 	if err != nil {
 		return events.Event{}, fmt.Errorf("failed to create event: %w", err)
 	}
@@ -461,7 +461,7 @@ func (s *Seeder) createDistances(ctx context.Context, eventID uuid.UUID, distanc
 			Surface:        d.surface,
 		}
 
-		distance, err := distService.Create(ctx, req)
+		distance, err := distService.Create(ctx, nil, req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create distance %.1fkm: %w", d.km, err)
 		}
@@ -543,7 +543,7 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 				Capacity:       d.capacity,
 				Surface:        "asphalt",
 			}
-			dist, err := distService.Create(ctx, req)
+			dist, err := distService.Create(ctx, nil, req)
 			if err != nil {
 				log.Printf("    Warning: failed to create distance %.1fkm: %v", d.km, err)
 				continue
@@ -561,12 +561,11 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 				log.Printf("    Skipping pricing stages — already exist for distance %s", d.ID)
 				continue
 			}
-			basePrice := 4500.0
 			// Early bird (10% discount)
 			if _, err := s.store.Queries.CreatePricingStage(ctx, db.CreatePricingStageParams{
 				DistanceID:  d.ID,
 				Name:        pgtype.Text{String: "Early Bird", Valid: true},
-				Price:       convert.ToPgNumeric(basePrice * 0.9),
+				PriceCents:  405000, // 4500.00 * 0.9
 				StartDate:   time.Date(2024, 9, 1, 0, 0, 0, 0, time.UTC),
 				EndDate:     time.Date(2024, 10, 1, 23, 59, 59, 0, time.UTC),
 				IsEarlyBird: pgtype.Bool{Bool: true, Valid: true},
@@ -577,7 +576,7 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 			if _, err := s.store.Queries.CreatePricingStage(ctx, db.CreatePricingStageParams{
 				DistanceID:  d.ID,
 				Name:        pgtype.Text{String: "Regular", Valid: true},
-				Price:       convert.ToPgNumeric(basePrice),
+				PriceCents:  450000,
 				StartDate:   time.Date(2024, 10, 2, 0, 0, 0, 0, time.UTC),
 				EndDate:     valenciaDate,
 				IsEarlyBird: pgtype.Bool{Bool: false, Valid: true},
@@ -629,18 +628,17 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 				Capacity:       1500,
 				Surface:        "asphalt",
 			}
-			dist, err := distService.Create(ctx, req)
+			dist, err := distService.Create(ctx, nil, req)
 			if err != nil {
 				log.Printf("    Warning: failed to create distance for Neon Dash: %v", err)
 			} else {
 				// Pricing stages for Neon Dash (regular only)
 				existingStages, _ := s.store.Queries.ListPricingStagesByDistance(ctx, dist.ID)
 				if len(existingStages) == 0 {
-					basePrice := 4500.0
 					if _, err := s.store.Queries.CreatePricingStage(ctx, db.CreatePricingStageParams{
 						DistanceID:  dist.ID,
 						Name:        pgtype.Text{String: "Regular", Valid: true},
-						Price:       convert.ToPgNumeric(basePrice),
+						PriceCents:  450000,
 						StartDate:   neonDate.AddDate(0, -1, 0),
 						EndDate:     neonDate,
 						IsEarlyBird: pgtype.Bool{Bool: false, Valid: true},
@@ -710,7 +708,7 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 				Capacity:       800,
 				Surface:        "trail",
 			}
-			dist, err := distService.Create(ctx, req)
+			dist, err := distService.Create(ctx, nil, req)
 			if err != nil {
 				log.Printf("    Warning: failed to create distance for Summit Peak: %v", err)
 			} else {
@@ -720,7 +718,7 @@ func (s *Seeder) createAdditionalMockEvents(ctx context.Context, distanceTypes [
 					if _, err := s.store.Queries.CreatePricingStage(ctx, db.CreatePricingStageParams{
 						DistanceID:  dist.ID,
 						Name:        pgtype.Text{String: "Regular", Valid: true},
-						Price:       convert.ToPgNumeric(6000.0),
+						PriceCents:  600000,
 						StartDate:   summitDate.AddDate(0, -1, 0),
 						EndDate:     summitDate,
 						IsEarlyBird: pgtype.Bool{Bool: false, Valid: true},
@@ -796,9 +794,9 @@ func (s *Seeder) createRunnerKits(ctx context.Context, eventID uuid.UUID) {
 
 	for _, k := range kitItems {
 		_, err := s.store.Queries.CreateRunnerKitItem(ctx, db.CreateRunnerKitItemParams{
-			EventID:     eventID,
-			Name:        k.name,
-			Icon:        k.icon,
+			EventID: eventID,
+			Name:    k.name,
+			Icon:    k.icon,
 		})
 		if err != nil {
 			log.Printf("    Warning: failed to create runner kit item '%s': %v", k.name, err)
@@ -862,7 +860,7 @@ func (s *Seeder) createOrGetEvent(ctx context.Context, organizerID uuid.UUID, na
 		LogoURL:      logoUrl,
 		Itinerary:    itinerary,
 	}
-	evt, err := service.Create(ctx, req)
+	evt, err := service.Create(ctx, nil, req) // seed has no claims; handler-level authz would reject, seed writes straight
 	if err != nil {
 		return events.Event{}, fmt.Errorf("failed to create event '%s': %w", name, err)
 	}
@@ -895,22 +893,22 @@ func (s *Seeder) createPricingStages(ctx context.Context, distances []db.Distanc
 			continue
 		}
 
-		basePrice := 350.0
+		basePriceCents := int64(35000) // integer cents (ADR-12)
 		km := convert.PgNumericToFloat64(distance.Km)
 		if km >= 21.1 {
-			basePrice = 500.0
+			basePriceCents = int64(50000)
 		}
 
 		// Early bird stage
 		earlyReq := events.CreatePricingStageRequest{
 			DistanceID:  distance.ID,
 			Name:        "Early Bird - Preventa",
-			Price:       basePrice * 0.8, // 20% discount
+			PriceCents:  basePriceCents * 80 / 100, // 20% discount
 			StartDate:   earlyBirdStart,
 			EndDate:     earlyBirdEnd,
 			IsEarlyBird: true,
 		}
-		if _, err := service.CreatePricingStage(ctx, earlyReq); err != nil {
+		if _, err := service.CreatePricingStage(ctx, nil, earlyReq); err != nil {
 			log.Printf("  Warning: failed to create early bird pricing: %v", err)
 		}
 
@@ -918,12 +916,12 @@ func (s *Seeder) createPricingStages(ctx context.Context, distances []db.Distanc
 		regReq := events.CreatePricingStageRequest{
 			DistanceID:  distance.ID,
 			Name:        "Precio Regular",
-			Price:       basePrice,
+			PriceCents:  basePriceCents,
 			StartDate:   regStart,
 			EndDate:     regEnd,
 			IsEarlyBird: false,
 		}
-		if _, err := service.CreatePricingStage(ctx, regReq); err != nil {
+		if _, err := service.CreatePricingStage(ctx, nil, regReq); err != nil {
 			log.Printf("  Warning: failed to create regular pricing: %v", err)
 		}
 
@@ -931,16 +929,15 @@ func (s *Seeder) createPricingStages(ctx context.Context, distances []db.Distanc
 		lateReq := events.CreatePricingStageRequest{
 			DistanceID:  distance.ID,
 			Name:        "Precio Tardío",
-			Price:       basePrice * 1.3, // 30% surcharge
+			PriceCents:  basePriceCents * 130 / 100, // 30% surcharge
 			StartDate:   lateStart,
 			EndDate:     lateEnd,
 			IsEarlyBird: false,
 		}
-		if _, err := service.CreatePricingStage(ctx, lateReq); err != nil {
+		if _, err := service.CreatePricingStage(ctx, nil, lateReq); err != nil {
 			log.Printf("  Warning: failed to create late pricing: %v", err)
 		}
 	}
 
 	return nil
 }
-

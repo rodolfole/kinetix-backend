@@ -16,18 +16,18 @@ import (
 const createAward = `-- name: CreateAward :one
 
 INSERT INTO awards (
-    distance_id, age_category_id, gender, place, prize_amount
+    distance_id, age_category_id, gender, place, prize_cents
 ) VALUES (
     $1, $2, $3, $4, $5
-) RETURNING id, distance_id, age_category_id, gender, place, prize_amount, created_at
+) RETURNING id, distance_id, age_category_id, gender, place, created_at, prize_cents
 `
 
 type CreateAwardParams struct {
-	DistanceID    uuid.UUID      `json:"distance_id"`
-	AgeCategoryID uuid.UUID      `json:"age_category_id"`
-	Gender        string         `json:"gender"`
-	Place         int32          `json:"place"`
-	PrizeAmount   pgtype.Numeric `json:"prize_amount"`
+	DistanceID    uuid.UUID `json:"distance_id"`
+	AgeCategoryID uuid.UUID `json:"age_category_id"`
+	Gender        string    `json:"gender"`
+	Place         int32     `json:"place"`
+	PrizeCents    int64     `json:"prize_cents"`
 }
 
 // sqlc queries for awards
@@ -37,7 +37,7 @@ func (q *Queries) CreateAward(ctx context.Context, arg CreateAwardParams) (Award
 		arg.AgeCategoryID,
 		arg.Gender,
 		arg.Place,
-		arg.PrizeAmount,
+		arg.PrizeCents,
 	)
 	var i Award
 	err := row.Scan(
@@ -46,8 +46,8 @@ func (q *Queries) CreateAward(ctx context.Context, arg CreateAwardParams) (Award
 		&i.AgeCategoryID,
 		&i.Gender,
 		&i.Place,
-		&i.PrizeAmount,
 		&i.CreatedAt,
+		&i.PrizeCents,
 	)
 	return i, err
 }
@@ -271,19 +271,19 @@ func (q *Queries) CreateEventTag(ctx context.Context, arg CreateEventTagParams) 
 const createOrder = `-- name: CreateOrder :one
 
 INSERT INTO orders (
-    registration_id, participant_id, event_id, amount, currency,
+    registration_id, participant_id, event_id, amount_cents, currency,
     status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id,
     transaction_date
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-) RETURNING id, registration_id, participant_id, event_id, amount, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at
+) RETURNING id, registration_id, participant_id, event_id, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at, amount_cents
 `
 
 type CreateOrderParams struct {
 	RegistrationID          uuid.UUID          `json:"registration_id"`
 	ParticipantID           uuid.UUID          `json:"participant_id"`
 	EventID                 uuid.UUID          `json:"event_id"`
-	Amount                  pgtype.Numeric     `json:"amount"`
+	AmountCents             int64              `json:"amount_cents"`
 	Currency                string             `json:"currency"`
 	Status                  pgtype.Text        `json:"status"`
 	PaymentMethod           pgtype.Text        `json:"payment_method"`
@@ -298,7 +298,7 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		arg.RegistrationID,
 		arg.ParticipantID,
 		arg.EventID,
-		arg.Amount,
+		arg.AmountCents,
 		arg.Currency,
 		arg.Status,
 		arg.PaymentMethod,
@@ -312,7 +312,6 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		&i.RegistrationID,
 		&i.ParticipantID,
 		&i.EventID,
-		&i.Amount,
 		&i.Currency,
 		&i.Status,
 		&i.PaymentMethod,
@@ -321,6 +320,7 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		&i.TransactionDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AmountCents,
 	)
 	return i, err
 }
@@ -379,6 +379,50 @@ func (q *Queries) CreateOrganizer(ctx context.Context, arg CreateOrganizerParams
 		&i.LastLogin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createOrganizerPayout = `-- name: CreateOrganizerPayout :one
+
+INSERT INTO organizer_payouts (
+    organizer_id, order_id, amount_cents, currency, commission_pct
+) VALUES (
+    $1, $2, $3,
+    $4, $5
+) RETURNING id, organizer_id, order_id, amount_cents, currency, commission_pct, status, mp_payout_id, failure_reason, created_at, sent_at
+`
+
+type CreateOrganizerPayoutParams struct {
+	OrganizerID   uuid.UUID      `json:"organizer_id"`
+	OrderID       uuid.UUID      `json:"order_id"`
+	AmountCents   int64          `json:"amount_cents"`
+	Currency      string         `json:"currency"`
+	CommissionPct pgtype.Numeric `json:"commission_pct"`
+}
+
+// ===== organizer_payouts =====
+func (q *Queries) CreateOrganizerPayout(ctx context.Context, arg CreateOrganizerPayoutParams) (OrganizerPayout, error) {
+	row := q.db.QueryRow(ctx, createOrganizerPayout,
+		arg.OrganizerID,
+		arg.OrderID,
+		arg.AmountCents,
+		arg.Currency,
+		arg.CommissionPct,
+	)
+	var i OrganizerPayout
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizerID,
+		&i.OrderID,
+		&i.AmountCents,
+		&i.Currency,
+		&i.CommissionPct,
+		&i.Status,
+		&i.MpPayoutID,
+		&i.FailureReason,
+		&i.CreatedAt,
+		&i.SentAt,
 	)
 	return i, err
 }
@@ -464,19 +508,19 @@ func (q *Queries) CreateParticipant(ctx context.Context, arg CreateParticipantPa
 const createPricingStage = `-- name: CreatePricingStage :one
 
 INSERT INTO pricing_stages (
-    distance_id, name, price, start_date, end_date, is_early_bird
+    distance_id, name, price_cents, start_date, end_date, is_early_bird
 ) VALUES (
     $1, $2, $3, $4, $5, $6
-) RETURNING id, distance_id, name, price, start_date, end_date, is_early_bird, created_at
+) RETURNING id, distance_id, name, start_date, end_date, is_early_bird, created_at, price_cents
 `
 
 type CreatePricingStageParams struct {
-	DistanceID  uuid.UUID      `json:"distance_id"`
-	Name        pgtype.Text    `json:"name"`
-	Price       pgtype.Numeric `json:"price"`
-	StartDate   time.Time      `json:"start_date"`
-	EndDate     time.Time      `json:"end_date"`
-	IsEarlyBird pgtype.Bool    `json:"is_early_bird"`
+	DistanceID  uuid.UUID   `json:"distance_id"`
+	Name        pgtype.Text `json:"name"`
+	PriceCents  int64       `json:"price_cents"`
+	StartDate   time.Time   `json:"start_date"`
+	EndDate     time.Time   `json:"end_date"`
+	IsEarlyBird pgtype.Bool `json:"is_early_bird"`
 }
 
 // sqlc queries for pricing stages
@@ -484,7 +528,7 @@ func (q *Queries) CreatePricingStage(ctx context.Context, arg CreatePricingStage
 	row := q.db.QueryRow(ctx, createPricingStage,
 		arg.DistanceID,
 		arg.Name,
-		arg.Price,
+		arg.PriceCents,
 		arg.StartDate,
 		arg.EndDate,
 		arg.IsEarlyBird,
@@ -494,11 +538,11 @@ func (q *Queries) CreatePricingStage(ctx context.Context, arg CreatePricingStage
 		&i.ID,
 		&i.DistanceID,
 		&i.Name,
-		&i.Price,
 		&i.StartDate,
 		&i.EndDate,
 		&i.IsEarlyBird,
 		&i.CreatedAt,
+		&i.PriceCents,
 	)
 	return i, err
 }
@@ -645,18 +689,14 @@ INSERT INTO runner_kit_items (event_id, name, icon) VALUES ($1, $2, $3) RETURNIN
 `
 
 type CreateRunnerKitItemParams struct {
-	EventID     uuid.UUID `json:"event_id"`
-	Name        string    `json:"name"`
-	Icon        string    `json:"icon"`
+	EventID uuid.UUID `json:"event_id"`
+	Name    string    `json:"name"`
+	Icon    string    `json:"icon"`
 }
 
 // sqlc queries for runner_kit_items
 func (q *Queries) CreateRunnerKitItem(ctx context.Context, arg CreateRunnerKitItemParams) (RunnerKitItem, error) {
-	row := q.db.QueryRow(ctx, createRunnerKitItem,
-		arg.EventID,
-		arg.Name,
-		arg.Icon,
-	)
+	row := q.db.QueryRow(ctx, createRunnerKitItem, arg.EventID, arg.Name, arg.Icon)
 	var i RunnerKitItem
 	err := row.Scan(
 		&i.ID,
@@ -939,7 +979,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 }
 
 const getAward = `-- name: GetAward :one
-SELECT id, distance_id, age_category_id, gender, prize_amount, created_at FROM awards
+SELECT id, distance_id, age_category_id, gender, place, created_at, prize_cents FROM awards
 WHERE id = $1 LIMIT 1
 `
 
@@ -951,18 +991,19 @@ func (q *Queries) GetAward(ctx context.Context, id uuid.UUID) (Award, error) {
 		&i.DistanceID,
 		&i.AgeCategoryID,
 		&i.Gender,
-		&i.PrizeAmount,
+		&i.Place,
 		&i.CreatedAt,
+		&i.PrizeCents,
 	)
 	return i, err
 }
 
 const getCurrentPricing = `-- name: GetCurrentPricing :many
-SELECT id, distance_id, name, price, start_date, end_date, is_early_bird, created_at FROM pricing_stages
+SELECT id, distance_id, name, start_date, end_date, is_early_bird, created_at, price_cents FROM pricing_stages
 WHERE distance_id = $1
   AND start_date <= CURRENT_DATE
   AND end_date >= CURRENT_DATE
-ORDER BY price ASC
+ORDER BY price_cents ASC
 `
 
 func (q *Queries) GetCurrentPricing(ctx context.Context, distanceID uuid.UUID) ([]PricingStage, error) {
@@ -978,11 +1019,11 @@ func (q *Queries) GetCurrentPricing(ctx context.Context, distanceID uuid.UUID) (
 			&i.ID,
 			&i.DistanceID,
 			&i.Name,
-			&i.Price,
 			&i.StartDate,
 			&i.EndDate,
 			&i.IsEarlyBird,
 			&i.CreatedAt,
+			&i.PriceCents,
 		); err != nil {
 			return nil, err
 		}
@@ -1200,7 +1241,7 @@ func (q *Queries) GetMaxBibNumberByEvent(ctx context.Context, eventID uuid.UUID)
 }
 
 const getOrder = `-- name: GetOrder :one
-SELECT id, registration_id, participant_id, event_id, amount, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at FROM orders
+SELECT id, registration_id, participant_id, event_id, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at, amount_cents FROM orders
 WHERE id = $1 LIMIT 1
 `
 
@@ -1212,7 +1253,6 @@ func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (Order, error) {
 		&i.RegistrationID,
 		&i.ParticipantID,
 		&i.EventID,
-		&i.Amount,
 		&i.Currency,
 		&i.Status,
 		&i.PaymentMethod,
@@ -1221,12 +1261,13 @@ func (q *Queries) GetOrder(ctx context.Context, id uuid.UUID) (Order, error) {
 		&i.TransactionDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AmountCents,
 	)
 	return i, err
 }
 
 const getOrderByMercadoPagoPaymentId = `-- name: GetOrderByMercadoPagoPaymentId :one
-SELECT id, registration_id, participant_id, event_id, amount, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at FROM orders
+SELECT id, registration_id, participant_id, event_id, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at, amount_cents FROM orders
 WHERE mercado_pago_payment_id = $1 LIMIT 1
 `
 
@@ -1238,7 +1279,6 @@ func (q *Queries) GetOrderByMercadoPagoPaymentId(ctx context.Context, mercadoPag
 		&i.RegistrationID,
 		&i.ParticipantID,
 		&i.EventID,
-		&i.Amount,
 		&i.Currency,
 		&i.Status,
 		&i.PaymentMethod,
@@ -1247,12 +1287,13 @@ func (q *Queries) GetOrderByMercadoPagoPaymentId(ctx context.Context, mercadoPag
 		&i.TransactionDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AmountCents,
 	)
 	return i, err
 }
 
 const getOrderByRegistrationId = `-- name: GetOrderByRegistrationId :one
-SELECT id, registration_id, participant_id, event_id, amount, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at FROM orders
+SELECT id, registration_id, participant_id, event_id, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at, amount_cents FROM orders
 WHERE registration_id = $1 LIMIT 1
 `
 
@@ -1264,7 +1305,6 @@ func (q *Queries) GetOrderByRegistrationId(ctx context.Context, registrationID u
 		&i.RegistrationID,
 		&i.ParticipantID,
 		&i.EventID,
-		&i.Amount,
 		&i.Currency,
 		&i.Status,
 		&i.PaymentMethod,
@@ -1273,6 +1313,7 @@ func (q *Queries) GetOrderByRegistrationId(ctx context.Context, registrationID u
 		&i.TransactionDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AmountCents,
 	)
 	return i, err
 }
@@ -1329,6 +1370,54 @@ func (q *Queries) GetOrganizerByRFC(ctx context.Context, rfc string) (Organizer,
 		&i.LastLogin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOrganizerMPCredentials = `-- name: GetOrganizerMPCredentials :one
+
+SELECT organizer_id, mp_user_id, access_token, refresh_token, expires_at, connected_at
+  FROM organizer_mp_credentials
+ WHERE organizer_id = $1 LIMIT 1
+`
+
+// ===== organizer_mp_credentials =====
+func (q *Queries) GetOrganizerMPCredentials(ctx context.Context, organizerID uuid.UUID) (OrganizerMpCredential, error) {
+	row := q.db.QueryRow(ctx, getOrganizerMPCredentials, organizerID)
+	var i OrganizerMpCredential
+	err := row.Scan(
+		&i.OrganizerID,
+		&i.MpUserID,
+		&i.AccessToken,
+		&i.RefreshToken,
+		&i.ExpiresAt,
+		&i.ConnectedAt,
+	)
+	return i, err
+}
+
+const getOrganizerPayoutByID = `-- name: GetOrganizerPayoutByID :one
+SELECT id, organizer_id, order_id, amount_cents, currency, commission_pct,
+       status, mp_payout_id, failure_reason, created_at, sent_at
+  FROM organizer_payouts
+ WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetOrganizerPayoutByID(ctx context.Context, id uuid.UUID) (OrganizerPayout, error) {
+	row := q.db.QueryRow(ctx, getOrganizerPayoutByID, id)
+	var i OrganizerPayout
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizerID,
+		&i.OrderID,
+		&i.AmountCents,
+		&i.Currency,
+		&i.CommissionPct,
+		&i.Status,
+		&i.MpPayoutID,
+		&i.FailureReason,
+		&i.CreatedAt,
+		&i.SentAt,
 	)
 	return i, err
 }
@@ -1399,8 +1488,26 @@ func (q *Queries) GetParticipantByEmail(ctx context.Context, email string) (Part
 	return i, err
 }
 
+const getPlatformConfig = `-- name: GetPlatformConfig :one
+
+SELECT id, commission_pct, updated_at, updated_by FROM platform_config WHERE id = 1 LIMIT 1
+`
+
+// ===== platform_config =====
+func (q *Queries) GetPlatformConfig(ctx context.Context) (PlatformConfig, error) {
+	row := q.db.QueryRow(ctx, getPlatformConfig)
+	var i PlatformConfig
+	err := row.Scan(
+		&i.ID,
+		&i.CommissionPct,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
+}
+
 const getPricingStage = `-- name: GetPricingStage :one
-SELECT id, distance_id, name, price, start_date, end_date, is_early_bird, created_at FROM pricing_stages
+SELECT id, distance_id, name, start_date, end_date, is_early_bird, created_at, price_cents FROM pricing_stages
 WHERE id = $1 LIMIT 1
 `
 
@@ -1411,11 +1518,11 @@ func (q *Queries) GetPricingStage(ctx context.Context, id uuid.UUID) (PricingSta
 		&i.ID,
 		&i.DistanceID,
 		&i.Name,
-		&i.Price,
 		&i.StartDate,
 		&i.EndDate,
 		&i.IsEarlyBird,
 		&i.CreatedAt,
+		&i.PriceCents,
 	)
 	return i, err
 }
@@ -1707,7 +1814,7 @@ func (q *Queries) ListAgeCategories(ctx context.Context) ([]AgeCategory, error) 
 }
 
 const listAwardsByDistance = `-- name: ListAwardsByDistance :many
-SELECT id, distance_id, age_category_id, gender, prize_amount, created_at FROM awards
+SELECT id, distance_id, age_category_id, gender, place, created_at, prize_cents FROM awards
 WHERE distance_id = $1
 ORDER BY age_category_id
 `
@@ -1726,8 +1833,9 @@ func (q *Queries) ListAwardsByDistance(ctx context.Context, distanceID uuid.UUID
 			&i.DistanceID,
 			&i.AgeCategoryID,
 			&i.Gender,
-			&i.PrizeAmount,
+			&i.Place,
 			&i.CreatedAt,
+			&i.PrizeCents,
 		); err != nil {
 			return nil, err
 		}
@@ -2041,7 +2149,7 @@ func (q *Queries) ListEventsByOrganizer(ctx context.Context, organizerID uuid.UU
 }
 
 const listOrdersByEvent = `-- name: ListOrdersByEvent :many
-SELECT id, registration_id, participant_id, event_id, amount, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at FROM orders
+SELECT id, registration_id, participant_id, event_id, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at, amount_cents FROM orders
 WHERE event_id = $1
 ORDER BY created_at DESC
 `
@@ -2060,7 +2168,6 @@ func (q *Queries) ListOrdersByEvent(ctx context.Context, eventID uuid.UUID) ([]O
 			&i.RegistrationID,
 			&i.ParticipantID,
 			&i.EventID,
-			&i.Amount,
 			&i.Currency,
 			&i.Status,
 			&i.PaymentMethod,
@@ -2069,6 +2176,7 @@ func (q *Queries) ListOrdersByEvent(ctx context.Context, eventID uuid.UUID) ([]O
 			&i.TransactionDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AmountCents,
 		); err != nil {
 			return nil, err
 		}
@@ -2081,7 +2189,7 @@ func (q *Queries) ListOrdersByEvent(ctx context.Context, eventID uuid.UUID) ([]O
 }
 
 const listOrdersByParticipant = `-- name: ListOrdersByParticipant :many
-SELECT id, registration_id, participant_id, event_id, amount, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at FROM orders
+SELECT id, registration_id, participant_id, event_id, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at, amount_cents FROM orders
 WHERE participant_id = $1
 ORDER BY created_at DESC
 `
@@ -2100,7 +2208,6 @@ func (q *Queries) ListOrdersByParticipant(ctx context.Context, participantID uui
 			&i.RegistrationID,
 			&i.ParticipantID,
 			&i.EventID,
-			&i.Amount,
 			&i.Currency,
 			&i.Status,
 			&i.PaymentMethod,
@@ -2109,6 +2216,7 @@ func (q *Queries) ListOrdersByParticipant(ctx context.Context, participantID uui
 			&i.TransactionDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AmountCents,
 		); err != nil {
 			return nil, err
 		}
@@ -2121,7 +2229,7 @@ func (q *Queries) ListOrdersByParticipant(ctx context.Context, participantID uui
 }
 
 const listOrdersByStatus = `-- name: ListOrdersByStatus :many
-SELECT id, registration_id, participant_id, event_id, amount, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at FROM orders
+SELECT id, registration_id, participant_id, event_id, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at, amount_cents FROM orders
 WHERE status = $1
 ORDER BY created_at DESC
 `
@@ -2140,7 +2248,6 @@ func (q *Queries) ListOrdersByStatus(ctx context.Context, status pgtype.Text) ([
 			&i.RegistrationID,
 			&i.ParticipantID,
 			&i.EventID,
-			&i.Amount,
 			&i.Currency,
 			&i.Status,
 			&i.PaymentMethod,
@@ -2149,6 +2256,93 @@ func (q *Queries) ListOrdersByStatus(ctx context.Context, status pgtype.Text) ([
 			&i.TransactionDate,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AmountCents,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizerPayouts = `-- name: ListOrganizerPayouts :many
+SELECT id, organizer_id, order_id, amount_cents, currency, commission_pct,
+       status, mp_payout_id, failure_reason, created_at, sent_at
+  FROM organizer_payouts
+ ORDER BY created_at DESC
+ LIMIT $1
+`
+
+func (q *Queries) ListOrganizerPayouts(ctx context.Context, limitCount int32) ([]OrganizerPayout, error) {
+	rows, err := q.db.Query(ctx, listOrganizerPayouts, limitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OrganizerPayout{}
+	for rows.Next() {
+		var i OrganizerPayout
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizerID,
+			&i.OrderID,
+			&i.AmountCents,
+			&i.Currency,
+			&i.CommissionPct,
+			&i.Status,
+			&i.MpPayoutID,
+			&i.FailureReason,
+			&i.CreatedAt,
+			&i.SentAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizerPayoutsByStatus = `-- name: ListOrganizerPayoutsByStatus :many
+SELECT id, organizer_id, order_id, amount_cents, currency, commission_pct,
+       status, mp_payout_id, failure_reason, created_at, sent_at
+  FROM organizer_payouts
+ WHERE status = $1
+ ORDER BY created_at DESC
+ LIMIT $2
+`
+
+type ListOrganizerPayoutsByStatusParams struct {
+	Status     string `json:"status"`
+	LimitCount int32  `json:"limit_count"`
+}
+
+func (q *Queries) ListOrganizerPayoutsByStatus(ctx context.Context, arg ListOrganizerPayoutsByStatusParams) ([]OrganizerPayout, error) {
+	rows, err := q.db.Query(ctx, listOrganizerPayoutsByStatus, arg.Status, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OrganizerPayout{}
+	for rows.Next() {
+		var i OrganizerPayout
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizerID,
+			&i.OrderID,
+			&i.AmountCents,
+			&i.Currency,
+			&i.CommissionPct,
+			&i.Status,
+			&i.MpPayoutID,
+			&i.FailureReason,
+			&i.CreatedAt,
+			&i.SentAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2260,7 +2454,7 @@ func (q *Queries) ListParticipants(ctx context.Context, arg ListParticipantsPara
 }
 
 const listPricingStagesByDistance = `-- name: ListPricingStagesByDistance :many
-SELECT id, distance_id, name, price, start_date, end_date, is_early_bird, created_at FROM pricing_stages
+SELECT id, distance_id, name, start_date, end_date, is_early_bird, created_at, price_cents FROM pricing_stages
 WHERE distance_id = $1
 ORDER BY start_date ASC
 `
@@ -2278,11 +2472,11 @@ func (q *Queries) ListPricingStagesByDistance(ctx context.Context, distanceID uu
 			&i.ID,
 			&i.DistanceID,
 			&i.Name,
-			&i.Price,
 			&i.StartDate,
 			&i.EndDate,
 			&i.IsEarlyBird,
 			&i.CreatedAt,
+			&i.PriceCents,
 		); err != nil {
 			return nil, err
 		}
@@ -2539,19 +2733,84 @@ func (q *Queries) ListSponsorsByEvent(ctx context.Context, eventID uuid.UUID) ([
 	return items, nil
 }
 
+const markOrganizerPayoutFailed = `-- name: MarkOrganizerPayoutFailed :one
+UPDATE organizer_payouts
+   SET status = 'failed',
+       failure_reason = $1
+ WHERE id = $2
+RETURNING id, organizer_id, order_id, amount_cents, currency, commission_pct, status, mp_payout_id, failure_reason, created_at, sent_at
+`
+
+type MarkOrganizerPayoutFailedParams struct {
+	FailureReason pgtype.Text `json:"failure_reason"`
+	ID            uuid.UUID   `json:"id"`
+}
+
+func (q *Queries) MarkOrganizerPayoutFailed(ctx context.Context, arg MarkOrganizerPayoutFailedParams) (OrganizerPayout, error) {
+	row := q.db.QueryRow(ctx, markOrganizerPayoutFailed, arg.FailureReason, arg.ID)
+	var i OrganizerPayout
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizerID,
+		&i.OrderID,
+		&i.AmountCents,
+		&i.Currency,
+		&i.CommissionPct,
+		&i.Status,
+		&i.MpPayoutID,
+		&i.FailureReason,
+		&i.CreatedAt,
+		&i.SentAt,
+	)
+	return i, err
+}
+
+const markOrganizerPayoutSent = `-- name: MarkOrganizerPayoutSent :one
+UPDATE organizer_payouts
+   SET status = 'sent',
+       mp_payout_id = $1,
+       sent_at = now()
+ WHERE id = $2
+RETURNING id, organizer_id, order_id, amount_cents, currency, commission_pct, status, mp_payout_id, failure_reason, created_at, sent_at
+`
+
+type MarkOrganizerPayoutSentParams struct {
+	MpPayoutID pgtype.Text `json:"mp_payout_id"`
+	ID         uuid.UUID   `json:"id"`
+}
+
+func (q *Queries) MarkOrganizerPayoutSent(ctx context.Context, arg MarkOrganizerPayoutSentParams) (OrganizerPayout, error) {
+	row := q.db.QueryRow(ctx, markOrganizerPayoutSent, arg.MpPayoutID, arg.ID)
+	var i OrganizerPayout
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizerID,
+		&i.OrderID,
+		&i.AmountCents,
+		&i.Currency,
+		&i.CommissionPct,
+		&i.Status,
+		&i.MpPayoutID,
+		&i.FailureReason,
+		&i.CreatedAt,
+		&i.SentAt,
+	)
+	return i, err
+}
+
 const updateAward = `-- name: UpdateAward :one
 UPDATE awards
-SET age_category_id = $2, gender = $3, place = $4, prize_amount = $5
+SET age_category_id = $2, gender = $3, place = $4, prize_cents = $5
 WHERE id = $1
-RETURNING id, distance_id, age_category_id, gender, place, prize_amount, created_at
+RETURNING id, distance_id, age_category_id, gender, place, created_at, prize_cents
 `
 
 type UpdateAwardParams struct {
-	ID            uuid.UUID      `json:"id"`
-	AgeCategoryID uuid.UUID      `json:"age_category_id"`
-	Gender        string         `json:"gender"`
-	Place         int32          `json:"place"`
-	PrizeAmount   pgtype.Numeric `json:"prize_amount"`
+	ID            uuid.UUID `json:"id"`
+	AgeCategoryID uuid.UUID `json:"age_category_id"`
+	Gender        string    `json:"gender"`
+	Place         int32     `json:"place"`
+	PrizeCents    int64     `json:"prize_cents"`
 }
 
 func (q *Queries) UpdateAward(ctx context.Context, arg UpdateAwardParams) (Award, error) {
@@ -2560,7 +2819,7 @@ func (q *Queries) UpdateAward(ctx context.Context, arg UpdateAwardParams) (Award
 		arg.AgeCategoryID,
 		arg.Gender,
 		arg.Place,
-		arg.PrizeAmount,
+		arg.PrizeCents,
 	)
 	var i Award
 	err := row.Scan(
@@ -2569,8 +2828,8 @@ func (q *Queries) UpdateAward(ctx context.Context, arg UpdateAwardParams) (Award
 		&i.AgeCategoryID,
 		&i.Gender,
 		&i.Place,
-		&i.PrizeAmount,
 		&i.CreatedAt,
+		&i.PrizeCents,
 	)
 	return i, err
 }
@@ -2763,7 +3022,7 @@ SET
     status = $5,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, registration_id, participant_id, event_id, amount, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at
+RETURNING id, registration_id, participant_id, event_id, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at, amount_cents
 `
 
 type UpdateOrderPaymentInfoParams struct {
@@ -2788,7 +3047,6 @@ func (q *Queries) UpdateOrderPaymentInfo(ctx context.Context, arg UpdateOrderPay
 		&i.RegistrationID,
 		&i.ParticipantID,
 		&i.EventID,
-		&i.Amount,
 		&i.Currency,
 		&i.Status,
 		&i.PaymentMethod,
@@ -2797,6 +3055,7 @@ func (q *Queries) UpdateOrderPaymentInfo(ctx context.Context, arg UpdateOrderPay
 		&i.TransactionDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AmountCents,
 	)
 	return i, err
 }
@@ -2805,7 +3064,7 @@ const updateOrderStatus = `-- name: UpdateOrderStatus :one
 UPDATE orders
 SET status = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, registration_id, participant_id, event_id, amount, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at
+RETURNING id, registration_id, participant_id, event_id, currency, status, payment_method, mercado_pago_payment_id, mercado_pago_preference_id, transaction_date, created_at, updated_at, amount_cents
 `
 
 type UpdateOrderStatusParams struct {
@@ -2821,7 +3080,6 @@ func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusPa
 		&i.RegistrationID,
 		&i.ParticipantID,
 		&i.EventID,
-		&i.Amount,
 		&i.Currency,
 		&i.Status,
 		&i.PaymentMethod,
@@ -2830,6 +3088,7 @@ func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusPa
 		&i.TransactionDate,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AmountCents,
 	)
 	return i, err
 }
@@ -2991,27 +3250,53 @@ func (q *Queries) UpdateParticipant(ctx context.Context, arg UpdateParticipantPa
 	return i, err
 }
 
+const updatePlatformConfig = `-- name: UpdatePlatformConfig :one
+UPDATE platform_config
+   SET commission_pct = $1,
+       updated_at = now(),
+       updated_by = $2
+ WHERE id = 1
+RETURNING id, commission_pct, updated_at, updated_by
+`
+
+type UpdatePlatformConfigParams struct {
+	CommissionPct pgtype.Numeric `json:"commission_pct"`
+	UpdatedBy     pgtype.Text    `json:"updated_by"`
+}
+
+func (q *Queries) UpdatePlatformConfig(ctx context.Context, arg UpdatePlatformConfigParams) (PlatformConfig, error) {
+	row := q.db.QueryRow(ctx, updatePlatformConfig, arg.CommissionPct, arg.UpdatedBy)
+	var i PlatformConfig
+	err := row.Scan(
+		&i.ID,
+		&i.CommissionPct,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
+}
+
 const updatePricingStage = `-- name: UpdatePricingStage :one
 UPDATE pricing_stages
-SET name = $2, price = $3, start_date = $4, end_date = $5, is_early_bird = $6
+SET name = $2, price_cents = $3, start_date = $4, end_date = $5, is_early_bird = $6
 WHERE id = $1
-RETURNING id, distance_id, name, price, start_date, end_date, is_early_bird, created_at
+RETURNING id, distance_id, name, start_date, end_date, is_early_bird, created_at, price_cents
 `
 
 type UpdatePricingStageParams struct {
-	ID          uuid.UUID      `json:"id"`
-	Name        pgtype.Text    `json:"name"`
-	Price       pgtype.Numeric `json:"price"`
-	StartDate   time.Time      `json:"start_date"`
-	EndDate     time.Time      `json:"end_date"`
-	IsEarlyBird pgtype.Bool    `json:"is_early_bird"`
+	ID          uuid.UUID   `json:"id"`
+	Name        pgtype.Text `json:"name"`
+	PriceCents  int64       `json:"price_cents"`
+	StartDate   time.Time   `json:"start_date"`
+	EndDate     time.Time   `json:"end_date"`
+	IsEarlyBird pgtype.Bool `json:"is_early_bird"`
 }
 
 func (q *Queries) UpdatePricingStage(ctx context.Context, arg UpdatePricingStageParams) (PricingStage, error) {
 	row := q.db.QueryRow(ctx, updatePricingStage,
 		arg.ID,
 		arg.Name,
-		arg.Price,
+		arg.PriceCents,
 		arg.StartDate,
 		arg.EndDate,
 		arg.IsEarlyBird,
@@ -3021,11 +3306,11 @@ func (q *Queries) UpdatePricingStage(ctx context.Context, arg UpdatePricingStage
 		&i.ID,
 		&i.DistanceID,
 		&i.Name,
-		&i.Price,
 		&i.StartDate,
 		&i.EndDate,
 		&i.IsEarlyBird,
 		&i.CreatedAt,
+		&i.PriceCents,
 	)
 	return i, err
 }
@@ -3156,17 +3441,13 @@ UPDATE runner_kit_items SET name = $2, icon = $3 WHERE id = $1 RETURNING id, eve
 `
 
 type UpdateRunnerKitItemParams struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Icon        string    `json:"icon"`
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+	Icon string    `json:"icon"`
 }
 
 func (q *Queries) UpdateRunnerKitItem(ctx context.Context, arg UpdateRunnerKitItemParams) (RunnerKitItem, error) {
-	row := q.db.QueryRow(ctx, updateRunnerKitItem,
-		arg.ID,
-		arg.Name,
-		arg.Icon,
-	)
+	row := q.db.QueryRow(ctx, updateRunnerKitItem, arg.ID, arg.Name, arg.Icon)
 	var i RunnerKitItem
 	err := row.Scan(
 		&i.ID,
@@ -3379,6 +3660,49 @@ func (q *Queries) UpsertEventParticipantField(ctx context.Context, arg UpsertEve
 		&i.IsEnabled,
 		&i.DisplayOrder,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const upsertOrganizerMPCredentials = `-- name: UpsertOrganizerMPCredentials :one
+INSERT INTO organizer_mp_credentials (
+    organizer_id, mp_user_id, access_token, refresh_token, expires_at
+) VALUES (
+    $1, $2, $3,
+    $4, $5
+)
+ON CONFLICT (organizer_id) DO UPDATE SET
+    mp_user_id = EXCLUDED.mp_user_id,
+    access_token = EXCLUDED.access_token,
+    refresh_token = EXCLUDED.refresh_token,
+    expires_at = EXCLUDED.expires_at
+RETURNING organizer_id, mp_user_id, access_token, refresh_token, expires_at, connected_at
+`
+
+type UpsertOrganizerMPCredentialsParams struct {
+	OrganizerID  uuid.UUID `json:"organizer_id"`
+	MpUserID     string    `json:"mp_user_id"`
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	ExpiresAt    time.Time `json:"expires_at"`
+}
+
+func (q *Queries) UpsertOrganizerMPCredentials(ctx context.Context, arg UpsertOrganizerMPCredentialsParams) (OrganizerMpCredential, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizerMPCredentials,
+		arg.OrganizerID,
+		arg.MpUserID,
+		arg.AccessToken,
+		arg.RefreshToken,
+		arg.ExpiresAt,
+	)
+	var i OrganizerMpCredential
+	err := row.Scan(
+		&i.OrganizerID,
+		&i.MpUserID,
+		&i.AccessToken,
+		&i.RefreshToken,
+		&i.ExpiresAt,
+		&i.ConnectedAt,
 	)
 	return i, err
 }

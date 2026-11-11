@@ -1,6 +1,9 @@
 package runnerkits
 
 import (
+	"fmt"
+	"kinetix-api/internal/httpx"
+	kinemiddleware "kinetix-api/internal/middleware"
 	"net/http"
 	"strings"
 
@@ -8,7 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
 )
 
 func sanitize(s string) string {
@@ -46,13 +48,14 @@ func (h *Handler) Routes(r chi.Router) {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateRunnerKitItemRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body: `+sanitize(err.Error())+`"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	item, err := h.service.Create(r.Context(), req)
+	claims, _ := kinemiddleware.ClaimsFrom(r.Context())
+	item, err := h.service.Create(r.Context(), claims, req)
 	if err != nil {
-		http.Error(w, `{"error":"`+sanitize(err.Error())+`"}`, http.StatusBadRequest)
+		httpx.WriteError(w, r, fmt.Errorf("invalid input: %w", httpx.ErrInvalidInput))
 		return
 	}
 
@@ -64,15 +67,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 // GetByID handles GET /runner-kits/{id}
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid runner kit item ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	item, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
-		http.Error(w, `{"error":"runner kit item not found"}`, http.StatusNotFound)
+		httpx.WriteError(w, r, fmt.Errorf("runner kit item not found: %w", httpx.ErrNotFound))
 		return
 	}
 
@@ -84,15 +86,14 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 // ListByEvent handles GET /runner-kits/event/{event_id}
 func (h *Handler) ListByEvent(w http.ResponseWriter, r *http.Request) {
-	eventID, err := uuid.Parse(chi.URLParam(r, "event_id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid event ID"}`, http.StatusBadRequest)
+	eventID, ok := httpx.UUIDParam(w, r, "event_id")
+	if !ok {
 		return
 	}
 
 	items, err := h.service.ListByEvent(r.Context(), eventID)
 	if err != nil {
-		http.Error(w, `{"error":"failed to list runner kit items"}`, http.StatusInternalServerError)
+		httpx.WriteError(w, r, fmt.Errorf("failed to list runner kit items: %w", err))
 		return
 	}
 
@@ -104,19 +105,19 @@ func (h *Handler) ListByEvent(w http.ResponseWriter, r *http.Request) {
 
 // Update handles PUT /runner-kits/{id}
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid runner kit item ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	var req UpdateRunnerKitItemRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	item, err := h.service.Update(r.Context(), id, req)
+	claims, _ := kinemiddleware.ClaimsFrom(r.Context())
+	item, err := h.service.Update(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -130,13 +131,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete handles DELETE /runner-kits/{id}
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid runner kit item ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), id); err != nil {
+	claims, _ := kinemiddleware.ClaimsFrom(r.Context())
+	if err := h.service.Delete(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}

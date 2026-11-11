@@ -12,7 +12,7 @@ type Order struct {
 	RegistrationID          uuid.UUID  `json:"registration_id"`
 	ParticipantID           uuid.UUID  `json:"participant_id"`
 	EventID                 uuid.UUID  `json:"event_id"`
-	Amount                  float64    `json:"amount"`
+	AmountCents             int64      `json:"amount_cents"`
 	Currency                string     `json:"currency"`
 	Status                  string     `json:"status"`
 	PaymentMethod           *string    `json:"payment_method,omitempty"`
@@ -28,7 +28,7 @@ type CreateOrderRequest struct {
 	RegistrationID uuid.UUID `json:"registration_id" validate:"required"`
 	ParticipantID  uuid.UUID `json:"participant_id" validate:"required"`
 	EventID        uuid.UUID `json:"event_id" validate:"required"`
-	Amount         float64   `json:"amount" validate:"required,gt=0"`
+	AmountCents    int64     `json:"amount_cents" validate:"required,gt=0"`
 	Currency       string    `json:"currency" validate:"required,len=3"`
 }
 

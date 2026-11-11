@@ -6,6 +6,8 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+	"kinetix-api/internal/auth"
+	"kinetix-api/internal/authz"
 )
 
 // Service handles business logic for runner kit items
@@ -23,9 +25,15 @@ func NewService(repo *Repository, validator *validator.Validate) *Service {
 }
 
 // Create creates a new runner kit item
-func (s *Service) Create(ctx context.Context, req CreateRunnerKitItemRequest) (RunnerKitItemResponse, error) {
+func (s *Service) Create(ctx context.Context, caller *auth.Claims, req CreateRunnerKitItemRequest) (RunnerKitItemResponse, error) {
 	if err := s.validator.Struct(req); err != nil {
 		return RunnerKitItemResponse{}, fmt.Errorf("validation error: %w", err)
+	}
+
+	if org, err := s.repo.EventOrganizer(ctx, req.EventID); err != nil {
+		return RunnerKitItemResponse{}, err
+	} else if err := authz.CanManageEvent(caller, org); err != nil {
+		return RunnerKitItemResponse{}, err
 	}
 
 	item, err := s.repo.Create(ctx, req)
@@ -70,7 +78,7 @@ func (s *Service) ListByEvent(ctx context.Context, eventID uuid.UUID) ([]RunnerK
 }
 
 // Update updates a runner kit item
-func (s *Service) Update(ctx context.Context, id uuid.UUID, req UpdateRunnerKitItemRequest) (RunnerKitItemResponse, error) {
+func (s *Service) Update(ctx context.Context, caller *auth.Claims, id uuid.UUID, req UpdateRunnerKitItemRequest) (RunnerKitItemResponse, error) {
 	if id == uuid.Nil {
 		return RunnerKitItemResponse{}, fmt.Errorf("invalid runner kit item ID")
 	}
@@ -79,9 +87,10 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, req UpdateRunnerKitI
 		return RunnerKitItemResponse{}, fmt.Errorf("validation error: %w", err)
 	}
 
-	_, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return RunnerKitItemResponse{}, fmt.Errorf("runner kit item not found")
+	if org, err := s.repo.EventOrganizerByItem(ctx, id); err != nil {
+		return RunnerKitItemResponse{}, err
+	} else if err := authz.CanManageEvent(caller, org); err != nil {
+		return RunnerKitItemResponse{}, err
 	}
 
 	item, err := s.repo.Update(ctx, id, req)
@@ -93,9 +102,15 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, req UpdateRunnerKitI
 }
 
 // Delete removes a runner kit item
-func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
+func (s *Service) Delete(ctx context.Context, caller *auth.Claims, id uuid.UUID) error {
 	if id == uuid.Nil {
 		return fmt.Errorf("invalid runner kit item ID")
+	}
+
+	if org, err := s.repo.EventOrganizerByItem(ctx, id); err != nil {
+		return err
+	} else if err := authz.CanManageEvent(caller, org); err != nil {
+		return err
 	}
 
 	if err := s.repo.Delete(ctx, id); err != nil {

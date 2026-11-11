@@ -286,6 +286,20 @@ func (r *Repository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // GetDistance retrieves a distance by ID (used by awards/pricing validation)
+// EventOrganizerByDistance returns the organizer owning the event that the
+// distance belongs to (ownership authorization support).
+func (r *Repository) EventOrganizerByDistance(ctx context.Context, distanceID uuid.UUID) (uuid.UUID, error) {
+	d, err := r.GetDistance(ctx, distanceID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	e, err := r.GetEventByID(ctx, d.EventID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return e.OrganizerID, nil
+}
+
 func (r *Repository) GetDistance(ctx context.Context, id uuid.UUID) (Distance, error) {
 	dist, err := r.store.Queries.GetDistance(ctx, id)
 	if err != nil {
@@ -309,7 +323,7 @@ func (r *Repository) CreateAward(ctx context.Context, req CreateAwardRequest) (A
 		AgeCategoryID: req.AgeCategoryID,
 		Gender:        req.Gender,
 		Place:         place,
-		PrizeAmount:   convert.ToPgNumeric(req.PrizeAmount),
+		PrizeCents:    req.PrizeCents,
 	})
 	if err != nil {
 		return Award{}, fmt.Errorf("failed to create award: %w", err)
@@ -351,7 +365,7 @@ func (r *Repository) UpdateAward(ctx context.Context, id uuid.UUID, req UpdateAw
 		AgeCategoryID: req.AgeCategoryID,
 		Gender:        req.Gender,
 		Place:         place,
-		PrizeAmount:   convert.ToPgNumeric(req.PrizeAmount),
+		PrizeCents:    req.PrizeCents,
 	})
 	if err != nil {
 		return Award{}, fmt.Errorf("failed to update award: %w", err)
@@ -375,7 +389,7 @@ func (r *Repository) CreatePricingStage(ctx context.Context, req CreatePricingSt
 	stage, err := r.store.Queries.CreatePricingStage(ctx, repo.CreatePricingStageParams{
 		DistanceID: req.DistanceID,
 		Name:       convert.ToPgText(req.Name),
-		Price:      convert.ToPgNumeric(req.Price),
+		PriceCents: req.PriceCents,
 		StartDate:  req.StartDate,
 		EndDate:    req.EndDate,
 	})
@@ -425,11 +439,11 @@ func (r *Repository) GetCurrentPricing(ctx context.Context, distanceID uuid.UUID
 // UpdatePricingStage updates a pricing stage
 func (r *Repository) UpdatePricingStage(ctx context.Context, id uuid.UUID, req UpdatePricingStageRequest) (PricingStage, error) {
 	stage, err := r.store.Queries.UpdatePricingStage(ctx, repo.UpdatePricingStageParams{
-		ID:        id,
-		Name:      convert.ToPgText(req.Name),
-		Price:     convert.ToPgNumeric(req.Price),
-		StartDate: req.StartDate,
-		EndDate:   req.EndDate,
+		ID:         id,
+		Name:       convert.ToPgText(req.Name),
+		PriceCents: req.PriceCents,
+		StartDate:  req.StartDate,
+		EndDate:    req.EndDate,
 	})
 	if err != nil {
 		return PricingStage{}, fmt.Errorf("failed to update pricing stage: %w", err)
@@ -585,10 +599,10 @@ func (r *Repository) UpsertEventParticipantFields(ctx context.Context, eventID u
 	// Then insert new fields
 	for i, f := range fields {
 		_, err := r.store.Queries.UpsertEventParticipantField(ctx, repo.UpsertEventParticipantFieldParams{
-			EventID:     eventID,
-			FieldName:   f.FieldName,
-			IsRequired:  f.IsRequired,
-			IsEnabled:   f.IsEnabled,
+			EventID:      eventID,
+			FieldName:    f.FieldName,
+			IsRequired:   f.IsRequired,
+			IsEnabled:    f.IsEnabled,
 			DisplayOrder: pgtype.Int4{Int32: int32(i), Valid: true},
 		})
 		if err != nil {
@@ -705,7 +719,7 @@ func toAward(a repo.Award) Award {
 		AgeCategoryID: a.AgeCategoryID,
 		Gender:        a.Gender,
 		Place:         int(a.Place),
-		PrizeAmount:   convert.PgNumericToFloat64(a.PrizeAmount),
+		PrizeCents:    a.PrizeCents,
 		CreatedAt:     convert.PgTimeToTime(a.CreatedAt),
 	}
 }
@@ -715,7 +729,7 @@ func toPricingStage(p repo.PricingStage) PricingStage {
 		ID:         p.ID,
 		DistanceID: p.DistanceID,
 		Name:       convert.PgTextToString(p.Name),
-		Price:      convert.PgNumericToFloat64(p.Price),
+		PriceCents: p.PriceCents,
 		StartDate:  p.StartDate,
 		EndDate:    p.EndDate,
 		CreatedAt:  convert.PgTimeToTime(p.CreatedAt),
@@ -736,11 +750,11 @@ func toSponsor(s repo.Sponsor) Sponsor {
 
 func toRunnerKitItem(k repo.RunnerKitItem) RunnerKitItem {
 	return RunnerKitItem{
-		ID:          k.ID,
-		EventID:     k.EventID,
-		Name:        k.Name,
-		Icon:        k.Icon,
-		CreatedAt:   convert.PgTimeToTime(k.CreatedAt),
+		ID:        k.ID,
+		EventID:   k.EventID,
+		Name:      k.Name,
+		Icon:      k.Icon,
+		CreatedAt: convert.PgTimeToTime(k.CreatedAt),
 	}
 }
 

@@ -1,3 +1,5 @@
+//go:build integration
+
 // Package testhelpers provides shared test helpers used across integration tests.
 // These tests are intended to run against a live API instance running on
 // http://localhost:8085 (the docker-compose default).

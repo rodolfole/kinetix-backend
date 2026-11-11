@@ -35,7 +35,7 @@ func JWTAuth(cfg auth.Config) func(http.Handler) http.Handler {
 			}
 
 			token := strings.TrimPrefix(authHeader, "Bearer ")
-			claims, err := auth.ValidateToken(cfg, token)
+			claims, err := auth.ValidateAccessToken(cfg, token)
 			if err != nil {
 				json.Write(w, http.StatusUnauthorized, map[string]string{
 					"error": "invalid or expired token",
@@ -50,12 +50,63 @@ func JWTAuth(cfg auth.Config) func(http.Handler) http.Handler {
 	}
 }
 
-// CORS creates CORS middleware
-func CORS() func(http.Handler) http.Handler {
-	allowedOrigins := []string{
-		"http://localhost:4322", // Astro dev server
+// RequireRole returns a middleware that allows the request only if the JWT
+// claim's Role matches the given role. Must be chained AFTER JWTAuth so
+// claims are in the context. Returns 403 (not 302) for non-matching roles
+// because the caller is authenticated but unauthorized for the resource.
+func RequireRole(role string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := r.Context().Value(ClaimsKey).(*auth.Claims)
+			if !ok || claims == nil {
+				json.WriteError(w, http.StatusUnauthorized, "missing auth claims")
+				return
+			}
+			if claims.Role != role {
+				json.WriteError(w, http.StatusForbidden, "insufficient role")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
 	}
+}
 
+// ClaimsFrom returns the JWT claims stored by JWTAuth. ok is false for
+// unauthenticated requests.
+func ClaimsFrom(ctx context.Context) (*auth.Claims, bool) {
+	claims, ok := ctx.Value(ClaimsKey).(*auth.Claims)
+	if !ok {
+		return nil, false
+	}
+	return claims, true
+}
+
+// RequireAnyRole allows the request when the JWT role is one of roles.
+// Same contract as RequireRole: 401 without claims, 403 for other roles.
+func RequireAnyRole(roles ...string) func(http.Handler) http.Handler {
+	allowed := make(map[string]struct{}, len(roles))
+	for _, role := range roles {
+		allowed[role] = struct{}{}
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := r.Context().Value(ClaimsKey).(*auth.Claims)
+			if !ok || claims == nil {
+				json.WriteError(w, http.StatusUnauthorized, "missing auth claims")
+				return
+			}
+			if _, ok := allowed[claims.Role]; !ok {
+				json.WriteError(w, http.StatusForbidden, "insufficient role")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// CORS creates CORS middleware that echoes only the configured origins
+// (config.ServerConfig.CORSAllowedOrigins).
+func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
@@ -74,6 +125,9 @@ func CORS() func(http.Handler) http.Handler {
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
 			}
 
+			// The origin participates in cache keys: do not return
+			// a cached response across origins.
+			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			w.Header().Set("Access-Control-Max-Age", "86400") // 24 hours
@@ -83,17 +137,6 @@ func CORS() func(http.Handler) http.Handler {
 				return
 			}
 
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-// Logger creates request logging middleware
-func Logger() func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Log request (in production, use proper logging)
-			// log.Printf("%s %s", r.Method, r.URL.Path)
 			next.ServeHTTP(w, r)
 		})
 	}

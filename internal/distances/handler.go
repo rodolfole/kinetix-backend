@@ -1,13 +1,15 @@
 package distances
 
 import (
+	"fmt"
+	"kinetix-api/internal/httpx"
+	kinemiddleware "kinetix-api/internal/middleware"
 	"net/http"
 
 	"kinetix-api/internal/json"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
 )
 
 // Handler handles HTTP requests for distances
@@ -65,11 +67,12 @@ func (h *Handler) ListTypes(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateDistanceRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	dist, err := h.service.Create(r.Context(), req)
+	claims, _ := kinemiddleware.ClaimsFrom(r.Context())
+	dist, err := h.service.Create(r.Context(), claims, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -83,15 +86,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 // GetByID handles GET /distances/{id}
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid distance ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	dist, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
-		http.Error(w, `{"error":"distance not found"}`, http.StatusNotFound)
+		httpx.WriteError(w, r, fmt.Errorf("distance not found: %w", httpx.ErrNotFound))
 		return
 	}
 
@@ -103,15 +105,14 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 // ListByEvent handles GET /distances/event/{event_id}
 func (h *Handler) ListByEvent(w http.ResponseWriter, r *http.Request) {
-	eventID, err := uuid.Parse(chi.URLParam(r, "event_id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid event ID"}`, http.StatusBadRequest)
+	eventID, ok := httpx.UUIDParam(w, r, "event_id")
+	if !ok {
 		return
 	}
 
 	distances, err := h.service.ListByEventWithTypes(r.Context(), eventID)
 	if err != nil {
-		http.Error(w, `{"error":"failed to list distances"}`, http.StatusInternalServerError)
+		httpx.WriteError(w, r, fmt.Errorf("failed to list distances: %w", err))
 		return
 	}
 
@@ -123,19 +124,19 @@ func (h *Handler) ListByEvent(w http.ResponseWriter, r *http.Request) {
 
 // Update handles PUT /distances/{id}
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid distance ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	var req UpdateDistanceRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
-	dist, err := h.service.Update(r.Context(), id, req)
+	claims, _ := kinemiddleware.ClaimsFrom(r.Context())
+	dist, err := h.service.Update(r.Context(), claims, id, req)
 	if err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -149,13 +150,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete handles DELETE /distances/{id}
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, `{"error":"invalid distance ID"}`, http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), id); err != nil {
+	claims, _ := kinemiddleware.ClaimsFrom(r.Context())
+	if err := h.service.Delete(r.Context(), claims, id); err != nil {
 		json.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}

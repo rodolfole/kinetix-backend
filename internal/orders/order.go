@@ -44,7 +44,7 @@ func (r *Repository) Create(ctx context.Context, req CreateOrderRequest) (Order,
 		RegistrationID:          req.RegistrationID,
 		ParticipantID:           req.ParticipantID,
 		EventID:                 req.EventID,
-		Amount:                  convert.ToPgNumeric(req.Amount),
+		AmountCents:             req.AmountCents,
 		Currency:                req.Currency,
 		Status:                  convert.ToPgText("pending"),
 		PaymentMethod:           convert.ToPgText(""),
@@ -74,6 +74,15 @@ func (r *Repository) GetByRegistrationID(ctx context.Context, registrationID uui
 		return Order{}, fmt.Errorf("order not found: %w", err)
 	}
 	return toOrder(order), nil
+}
+
+// EventOrganizerID returns the organizer that owns the event.
+func (r *Repository) EventOrganizerID(ctx context.Context, eventID uuid.UUID) (uuid.UUID, error) {
+	event, err := r.store.Queries.GetEvent(ctx, eventID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("event not found: %w", err)
+	}
+	return event.OrganizerID, nil
 }
 
 // GetByMercadoPagoPaymentID retrieves order by Mercado Pago payment ID
@@ -171,7 +180,7 @@ func toOrder(o repo.Order) Order {
 		RegistrationID:          o.RegistrationID,
 		ParticipantID:           o.ParticipantID,
 		EventID:                 o.EventID,
-		Amount:                  convert.PgNumericToFloat64(o.Amount),
+		AmountCents:             o.AmountCents,
 		Currency:                o.Currency,
 		Status:                  convert.PgTextToString(o.Status),
 		PaymentMethod:           convert.ToStringPtr(convert.PgTextToString(o.PaymentMethod)),

@@ -26,8 +26,8 @@ type Award struct {
 	AgeCategoryID uuid.UUID          `json:"age_category_id"`
 	Gender        string             `json:"gender"`
 	Place         int32              `json:"place"`
-	PrizeAmount   pgtype.Numeric     `json:"prize_amount"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	PrizeCents    int64              `json:"prize_cents"`
 }
 
 type Distance struct {
@@ -107,7 +107,6 @@ type Order struct {
 	RegistrationID          uuid.UUID          `json:"registration_id"`
 	ParticipantID           uuid.UUID          `json:"participant_id"`
 	EventID                 uuid.UUID          `json:"event_id"`
-	Amount                  pgtype.Numeric     `json:"amount"`
 	Currency                string             `json:"currency"`
 	Status                  pgtype.Text        `json:"status"`
 	PaymentMethod           pgtype.Text        `json:"payment_method"`
@@ -116,6 +115,7 @@ type Order struct {
 	TransactionDate         pgtype.Timestamptz `json:"transaction_date"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	AmountCents             int64              `json:"amount_cents"`
 }
 
 type Organizer struct {
@@ -134,6 +134,29 @@ type Organizer struct {
 	LastLogin      pgtype.Timestamptz `json:"last_login"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type OrganizerMpCredential struct {
+	OrganizerID  uuid.UUID `json:"organizer_id"`
+	MpUserID     string    `json:"mp_user_id"`
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	ConnectedAt  time.Time `json:"connected_at"`
+}
+
+type OrganizerPayout struct {
+	ID            uuid.UUID          `json:"id"`
+	OrganizerID   uuid.UUID          `json:"organizer_id"`
+	OrderID       uuid.UUID          `json:"order_id"`
+	AmountCents   int64              `json:"amount_cents"`
+	Currency      string             `json:"currency"`
+	CommissionPct pgtype.Numeric     `json:"commission_pct"`
+	Status        string             `json:"status"`
+	MpPayoutID    pgtype.Text        `json:"mp_payout_id"`
+	FailureReason pgtype.Text        `json:"failure_reason"`
+	CreatedAt     time.Time          `json:"created_at"`
+	SentAt        pgtype.Timestamptz `json:"sent_at"`
 }
 
 type Participant struct {
@@ -159,15 +182,22 @@ type Participant struct {
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 }
 
+type PlatformConfig struct {
+	ID            int32          `json:"id"`
+	CommissionPct pgtype.Numeric `json:"commission_pct"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	UpdatedBy     pgtype.Text    `json:"updated_by"`
+}
+
 type PricingStage struct {
 	ID          uuid.UUID          `json:"id"`
 	DistanceID  uuid.UUID          `json:"distance_id"`
 	Name        pgtype.Text        `json:"name"`
-	Price       pgtype.Numeric     `json:"price"`
 	StartDate   time.Time          `json:"start_date"`
 	EndDate     time.Time          `json:"end_date"`
 	IsEarlyBird pgtype.Bool        `json:"is_early_bird"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	PriceCents  int64              `json:"price_cents"`
 }
 
 type Registration struct {
@@ -208,11 +238,11 @@ type Route struct {
 }
 
 type RunnerKitItem struct {
-	ID          uuid.UUID          `json:"id"`
-	EventID     uuid.UUID          `json:"event_id"`
-	Name        string             `json:"name"`
-	Icon        string             `json:"icon"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID        uuid.UUID          `json:"id"`
+	EventID   uuid.UUID          `json:"event_id"`
+	Name      string             `json:"name"`
+	Icon      string             `json:"icon"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type Sponsor struct {

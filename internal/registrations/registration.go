@@ -63,6 +63,31 @@ func generateQRCode(regID, eventID, participantID uuid.UUID) string {
 }
 
 // Create inserts a new registration
+// GetParticipant reads a participant row (ownership/support reads).
+func (r *Repository) GetParticipant(ctx context.Context, id uuid.UUID) (repo.Participant, error) {
+	return r.store.Queries.GetParticipant(ctx, id)
+}
+
+// UpdateParticipant updates a participant row (team/size flow).
+func (r *Repository) UpdateParticipant(ctx context.Context, p repo.UpdateParticipantParams) (repo.Participant, error) {
+	return r.store.Queries.UpdateParticipant(ctx, p)
+}
+
+// EventParticipantFields lists the event's custom field config.
+func (r *Repository) EventParticipantFields(ctx context.Context, eventID uuid.UUID) ([]repo.EventParticipantField, error) {
+	return r.store.Queries.ListEventParticipantFieldsByEvent(ctx, eventID)
+}
+
+// ExecTx adapts store.ExecTx to a transaction-scoped Repository (ADR-14).
+func (r *Repository) ExecTx(ctx context.Context, fn func(serviceRepo ServiceRepository) error) error {
+	return r.store.ExecTx(ctx, func(q *repo.Queries) error {
+		return fn(&Repository{store: r.store.WithQueries(q)})
+	})
+}
+
+// The concrete repository satisfies the service interface at compile time.
+var _ ServiceRepository = (*Repository)(nil)
+
 func (r *Repository) Create(ctx context.Context, req CreateRegistrationRequest) (Registration, error) {
 	// Generate bib number
 	bibNumber, err := r.generateBibNumber(ctx, req.EventID)
@@ -174,23 +199,23 @@ func (r *Repository) Delete(ctx context.Context, id uuid.UUID) error {
 // CreateParticipant creates a new participant (used by CreateWithParticipant)
 func (r *Repository) CreateParticipant(ctx context.Context, req CreateParticipantData) (Participant, error) {
 	participant, err := r.store.Queries.CreateParticipant(ctx, repo.CreateParticipantParams{
-		FirstName:              req.FirstName,
-		LastName:               req.LastName,
-		SecondLastName:         convert.ToPgTextPtr(req.SecondLastName),
-		Gender:                 req.Gender,
-		BirthDate:              req.BirthDate,
-		Email:                  req.Email,
-		Phone:                  req.Phone,
-		Country:                req.Country,
-		Municipality:           convert.ToPgTextPtr(req.Municipality),
-		State:                  convert.ToPgTextPtr(req.State),
-		ZipCode:                convert.ToPgTextPtr(req.ZipCode),
-		Team:                   convert.ToPgTextPtr(req.Team),
-		Size:                   convert.ToPgTextPtr(req.Size),
-		EmergencyContactName:   convert.ToPgTextPtr(req.EmergencyContactName),
-		EmergencyContactPhone:  convert.ToPgTextPtr(req.EmergencyContactPhone),
-		MedicalInfo:            convert.ToPgTextPtr(req.MedicalInfo),
-		WaiverSignedAt:         convert.ToPgTimePtr(req.WaiverSignedAt),
+		FirstName:             req.FirstName,
+		LastName:              req.LastName,
+		SecondLastName:        convert.ToPgTextPtr(req.SecondLastName),
+		Gender:                req.Gender,
+		BirthDate:             req.BirthDate,
+		Email:                 req.Email,
+		Phone:                 req.Phone,
+		Country:               req.Country,
+		Municipality:          convert.ToPgTextPtr(req.Municipality),
+		State:                 convert.ToPgTextPtr(req.State),
+		ZipCode:               convert.ToPgTextPtr(req.ZipCode),
+		Team:                  convert.ToPgTextPtr(req.Team),
+		Size:                  convert.ToPgTextPtr(req.Size),
+		EmergencyContactName:  convert.ToPgTextPtr(req.EmergencyContactName),
+		EmergencyContactPhone: convert.ToPgTextPtr(req.EmergencyContactPhone),
+		MedicalInfo:           convert.ToPgTextPtr(req.MedicalInfo),
+		WaiverSignedAt:        convert.ToPgTimePtr(req.WaiverSignedAt),
 	})
 	if err != nil {
 		return Participant{}, fmt.Errorf("failed to create participant: %w", err)
@@ -211,12 +236,12 @@ func (r *Repository) CreateParticipant(ctx context.Context, req CreateParticipan
 		ZipCode:               convert.PgTextToStringPtr(participant.ZipCode),
 		Team:                  convert.PgTextToStringPtr(participant.Team),
 		Size:                  convert.PgTextToStringPtr(participant.Size),
-		EmergencyContactName:   convert.PgTextToStringPtr(participant.EmergencyContactName),
-		EmergencyContactPhone:  convert.PgTextToStringPtr(participant.EmergencyContactPhone),
+		EmergencyContactName:  convert.PgTextToStringPtr(participant.EmergencyContactName),
+		EmergencyContactPhone: convert.PgTextToStringPtr(participant.EmergencyContactPhone),
 		MedicalInfo:           convert.PgTextToStringPtr(participant.MedicalInfo),
 		WaiverSignedAt:        convert.PgTimeToTimePtr(participant.WaiverSignedAt),
-		CreatedAt:            convert.PgTimeToTime(participant.CreatedAt),
-		UpdatedAt:            convert.PgTimeToTime(participant.UpdatedAt),
+		CreatedAt:             convert.PgTimeToTime(participant.CreatedAt),
+		UpdatedAt:             convert.PgTimeToTime(participant.UpdatedAt),
 	}, nil
 }
 
