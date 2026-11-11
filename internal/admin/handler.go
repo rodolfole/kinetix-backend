@@ -3,7 +3,6 @@ package admin
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
@@ -11,11 +10,9 @@ import (
 
 	db "kinetix-api/internal/adapters/postgresql/sqlc"
 	kinetixjson "kinetix-api/internal/json"
+	"kinetix-api/internal/httpx"
 	"kinetix-api/internal/mp"
 )
-
-var _ = time.Time{}
-var _ = pgtype.Numeric{}
 
 var ErrInvalidCommission = errors.New("commission_pct must be between 0 and 100")
 
@@ -54,7 +51,7 @@ func (h *Handler) Routes() http.Handler {
 func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.service.GetConfig(r.Context())
 	if err != nil {
-		kinetixjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpx.WriteError(w, r, err)
 		return
 	}
 	kinetixjson.Write(w, http.StatusOK, map[string]any{
@@ -79,7 +76,7 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 			kinetixjson.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		kinetixjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpx.WriteError(w, r, err)
 		return
 	}
 	kinetixjson.Write(w, http.StatusOK, map[string]any{
@@ -92,7 +89,7 @@ func (h *Handler) ListPayouts(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	payouts, err := h.service.ListPayouts(r.Context(), status, 100)
 	if err != nil {
-		kinetixjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpx.WriteError(w, r, err)
 		return
 	}
 	resp := PayoutsListResponse{
@@ -156,7 +153,7 @@ func (h *Handler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = h.service.UpsertMPCredentials(r.Context(), orgID, tok)
 	if err != nil {
-		kinetixjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpx.WriteError(w, r, err)
 		return
 	}
 	kinetixjson.Write(w, http.StatusOK, map[string]any{
@@ -190,8 +187,6 @@ func (h *Handler) SendPayout(w http.ResponseWriter, r *http.Request) {
 	kinetixjson.Write(w, http.StatusOK, map[string]any{"payout_id": payoutID, "status": "sent"})
 }
 
-// splitPath extracts the segment between prefix and suffix from a path.
-// Returns the captured segment(s).
 func splitPath(path, prefix, suffix string) []string {
 	if !hasPrefix(path, prefix) {
 		return nil

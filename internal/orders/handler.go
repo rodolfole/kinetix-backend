@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"kinetix-api/internal/httpx"
 	kinemiddleware "kinetix-api/internal/middleware"
 
 	"kinetix-api/internal/mp"
@@ -76,13 +77,13 @@ func (h *Handler) Routes(r chi.Router) {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateOrderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpx.WriteValidation(w, err)
 		return
 	}
 
 	order, err := h.service.Create(r.Context(), req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -104,26 +105,26 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if eventIDStr != "" {
 		eventID, parseErr := uuid.Parse(eventIDStr)
 		if parseErr != nil {
-			jsonlib.WriteError(w, http.StatusBadRequest, "invalid event_id")
+			httpx.WriteErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid event_id")
 			return
 		}
 		orders, err = h.service.ListByEvent(r.Context(), eventID)
 	} else if participantIDStr != "" {
 		participantID, parseErr := uuid.Parse(participantIDStr)
 		if parseErr != nil {
-			jsonlib.WriteError(w, http.StatusBadRequest, "invalid participant_id")
+			httpx.WriteErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid participant_id")
 			return
 		}
 		orders, err = h.service.ListByParticipant(r.Context(), participantID)
 	} else if status != "" {
 		orders, err = h.service.ListByStatus(r.Context(), status)
 	} else {
-		http.Error(w, "event_id, participant_id, or status is required", http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "event_id, participant_id, or status is required")
 		return
 	}
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -135,15 +136,14 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 // GetByID handles GET /orders/{id}
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	order, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -169,7 +169,7 @@ func (h *Handler) UpdatePaymentInfo(w http.ResponseWriter, r *http.Request) {
 
 	order, err := h.service.UpdatePaymentInfo(r.Context(), id, req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -181,23 +181,21 @@ func (h *Handler) UpdatePaymentInfo(w http.ResponseWriter, r *http.Request) {
 
 // UpdateStatus handles PUT /orders/{id}/status
 func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	id, ok := httpx.UUIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 
 	var req struct {
 		Status string `json:"status"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !httpx.Read(w, r, &req) {
 		return
 	}
 
 	order, err := h.service.UpdateStatus(r.Context(), id, req.Status)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -250,7 +248,7 @@ func (h *Handler) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 
 	order, err := h.service.ProcessWebhook(r.Context(), webhook.Data.ID, confirm)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
