@@ -1,14 +1,18 @@
 package organizers
 
 import (
+	"fmt"
+
+	"kinetix-api/internal/httpx"
+
 	"net/http"
 	"strconv"
 
 	"kinetix-api/internal/json"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 )
 
 // Handler handles HTTP requests for organizers
@@ -38,7 +42,7 @@ func (h *Handler) Routes(r chi.Router) {
 func (h *Handler) CreateOrganizer(w http.ResponseWriter, r *http.Request) {
 	var req CreateOrganizerRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
@@ -59,13 +63,13 @@ func (h *Handler) GetOrganizer(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, `{"error":"invalid organizer ID"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid organizer id")
 		return
 	}
 
 	org, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
-		http.Error(w, `{"error":"organizer not found"}`, http.StatusNotFound)
+		httpx.WriteError(w, r, fmt.Errorf("organizer not found: %w", httpx.ErrNotFound))
 		return
 	}
 
@@ -86,7 +90,7 @@ func (h *Handler) ListOrganizers(w http.ResponseWriter, r *http.Request) {
 
 	organizers, total, err := h.service.List(r.Context(), limit, offset)
 	if err != nil {
-		http.Error(w, `{"error":"failed to list organizers"}`, http.StatusInternalServerError)
+		httpx.WriteError(w, r, fmt.Errorf("failed to list organizers: %w", err))
 		return
 	}
 
@@ -102,13 +106,13 @@ func (h *Handler) UpdateOrganizer(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, `{"error":"invalid organizer ID"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid organizer id")
 		return
 	}
 
 	var req UpdateOrganizerRequest
 	if err := json.Read(r, &req); err != nil {
-		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
@@ -129,7 +133,7 @@ func (h *Handler) DeleteOrganizer(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, `{"error":"invalid organizer ID"}`, http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "INVALID_ID", "invalid organizer id")
 		return
 	}
 

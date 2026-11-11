@@ -157,13 +157,13 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdatePaymentInfo(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpx.WriteError(w, r, fmt.Errorf("invalid input: %w", httpx.ErrInvalidInput))
 		return
 	}
 
 	var req UpdateOrderPaymentInfoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpx.WriteError(w, r, fmt.Errorf("invalid input: %w", httpx.ErrInvalidInput))
 		return
 	}
 
@@ -210,19 +210,19 @@ func (h *Handler) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 	// Read body for signature validation
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "failed to read request body", http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "failed to read request body")
 		return
 	}
 
 	// Parse payload first: MercadoPago signs over the notification data id.
 	var webhook PaymentWebhookRequest
 	if err := json.Unmarshal(body, &webhook); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "invalid request body")
 		return
 	}
 
 	if webhook.Data.ID == "" {
-		http.Error(w, "payment ID not found", http.StatusBadRequest)
+		httpx.WriteErrorCode(w, http.StatusBadRequest, "VALIDATION_FAILED", "payment id not found")
 		return
 	}
 
