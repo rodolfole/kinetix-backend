@@ -78,7 +78,7 @@ Global middleware order (`cmd/api/main.go`): `RequestID`, `RealIP`, `Logger`, `R
 | `events.Handler.Routes()` and `admin.Handler.Routes()` are dead; routes are listed one by one in `main.go` | `internal/events/handler.go`, `internal/admin/handler.go` | Rule 4 |
 | Most protected routes check only that a JWT exists, not the role or ownership | `cmd/api/main.go` | Rule 5 |
 | No transactions; registration writes 3 rows sequentially | `internal/auth/service.go` | Rule 6 |
-| CORS origin hardcoded to `http://localhost:4322`; `CORS_ALLOWED_ORIGINS` is ignored | `internal/middleware/middleware.go` | Rule 7 |
+| ~~CORS origin hardcoded~~ | fixed: `CORS_ALLOWED_ORIGINS` read in `internal/config`, echoed with `Vary: Origin`; origins live with the deployment and are reviewed on each new host | Rule 7 |
 | Two identical `auth.Config` values built in `main.go` | `cmd/api/main.go` | One config |
 | stdlib `log` only | everywhere | `log/slog` JSON logger with request ID |
 | `payouts-cron` not built into the Docker image | `Dockerfile` | Build and schedule it |
